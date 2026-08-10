@@ -7,6 +7,15 @@ const nextConfig: NextConfig = {
     "@contact-vault/parser",
     "@contact-vault/db",
   ],
+  // Server modules use TypeScript ESM `.js` import specifiers (NodeNext style).
+  // Webpack must map those to `.ts` sources during the Next build.
+  webpack: (config) => {
+    config.resolve.extensionAlias = {
+      ".js": [".ts", ".tsx", ".js"],
+      ".mjs": [".mts", ".mjs"],
+    };
+    return config;
+  },
 };
 
 export default nextConfig;
