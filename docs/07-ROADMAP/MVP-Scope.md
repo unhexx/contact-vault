@@ -32,12 +32,12 @@ Full vehicle photo pipelines, full financials/flights/incidents UI, advanced fuz
 ## Checklist
 
 1. [x] Core documentation package (incl. dual-format mapping)
-2. [ ] `packages/domain` Zod schemas
-3. [ ] `packages/db` Prisma schema + migrate
-4. [ ] `packages/parser` sectioned-text + void-html happy paths + tests
-5. [ ] `apps/web` upload + list + 360
-6. [ ] Merge suggestion UI
-7. [ ] Anonymized fixtures for **both** formats in `samples/`
+2. [x] `packages/domain` Zod schemas
+3. [x] `packages/db` Prisma schema + migrate
+4. [x] `packages/parser` sectioned-text + void-html happy paths + tests
+5. [x] `apps/web` upload + list + 360
+6. [x] Merge suggestion UI
+7. [x] Anonymized fixtures for **both** formats in `samples/`
 
 ## Success criterion
 
