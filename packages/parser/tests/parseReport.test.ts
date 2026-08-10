@@ -293,6 +293,32 @@ describe("parseReport sectioned-text", () => {
     ).toBe(true);
   });
 
+  it("conflicting отчество + different DOB → related, docs not absorbed (Issue 11)", () => {
+    const content = `=== Общая сводка ===
+ФИО: Тестов Тест Тестович
+День рождения: 15.01.1990
+Телефон: +79000000001
+
+=== S ===
+ФИО: Тестов Тест Иванович
+День рождения: 01.01.1985
+СНИЛС: 111-111-111 22
+`;
+    const result = parseReport({ content, reportId: REPORT_ID });
+    expect(result.persons).toHaveLength(1);
+    const person = result.persons[0]!;
+    expect(
+      person.relationships.some(
+        (r) => r.relatedPersonHint.fio === "Тестов Тест Иванович",
+      ),
+    ).toBe(true);
+    expect(
+      person.documents.some(
+        (d) => d.type === "snils" && d.number === "111-111-111 22",
+      ),
+    ).toBe(false);
+  });
+
   it("sectioned PHONE_UNNORMALIZED path", () => {
     const content = `=== Общая сводка ===
 ФИО: Тестов Тест Тестович

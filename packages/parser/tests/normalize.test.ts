@@ -119,4 +119,26 @@ describe("isLikelySamePerson / classifyRelatedPerson (KD17)", () => {
       ).kind,
     ).toBe("ambiguous");
   });
+
+  it("conflicting отчество (both present) is NOT same person (Issue 11)", () => {
+    expect(
+      isLikelySamePerson("Тестов Тест Тестович", "Тестов Тест Иванович"),
+    ).toBe(false);
+    expect(
+      classifyRelatedPerson(
+        "Тестов Тест Тестович",
+        "1990-01-15",
+        "Тестов Тест Иванович",
+        "1985-01-01",
+      ).kind,
+    ).toBe("related");
+    expect(
+      classifyRelatedPerson(
+        "Тестов Тест Тестович",
+        "1990-01-15",
+        "Тестов Тест Иванович",
+        "1990-01-15",
+      ).kind,
+    ).toBe("ambiguous");
+  });
 });

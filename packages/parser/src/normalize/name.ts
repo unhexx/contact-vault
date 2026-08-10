@@ -69,8 +69,13 @@ function isTokenPrefix(shorter: string[], longer: string[]): boolean {
 }
 
 /**
- * Likely same person: exact match, last+first match (отчество optional),
- * or one FIO is an ordered token prefix of the other (e.g. 2-token vs 3-token).
+ * Likely same person:
+ * - exact FIO match
+ * - last+first match when one отчество is missing OR both middles match
+ * - ordered token prefix (e.g. 2-token vs 3-token with same last+first)
+ *
+ * Conflicting middles (both present, different — Тестович vs Иванович)
+ * are NOT same-person even if last+first match (Issue 11).
  */
 export function isLikelySamePerson(
   a: string | undefined,
@@ -81,17 +86,29 @@ export function isLikelySamePerson(
 
   const pa = parseFio(a);
   const pb = parseFio(b);
+
+  // Both middles present and unequal → different people (do not short-circuit same)
+  if (
+    pa.middle &&
+    pb.middle &&
+    normToken(pa.middle) !== normToken(pb.middle)
+  ) {
+    return false;
+  }
+
   if (pa.last && pb.last && pa.first && pb.first) {
     if (
       normToken(pa.last) === normToken(pb.last) &&
       normToken(pa.first) === normToken(pb.first)
     ) {
+      // last+first same AND (one middle missing OR both equal — conflict handled above)
       return true;
     }
   }
 
   const ta = tokens(a);
   const tb = tokens(b);
+  // Token prefix only when not already ruled out by conflicting middles
   if (isTokenPrefix(ta, tb) || isTokenPrefix(tb, ta)) return true;
 
   return false;
