@@ -7,6 +7,7 @@ import type { Person } from "@contact-vault/domain";
 import { GitMerge, Trash2 } from "lucide-react";
 
 import { CopyField } from "@/components/copy-field";
+import { MergeSuggestionCard } from "@/components/merge-suggestion-card";
 import { PersonHeader } from "@/components/person-header";
 import { SourceBadge } from "@/components/source-badge";
 import { Badge } from "@/components/ui/badge";
@@ -116,18 +117,11 @@ export function Contact360({ personId }: { personId: string }) {
       <PersonHeader person={person} openSuggestionCount={openCount} />
 
       {openCount > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-sm dark:border-amber-700/50 dark:bg-amber-950/40">
-          <div className="flex items-center gap-2">
-            <GitMerge className="h-4 w-4 text-amber-700 dark:text-amber-300" />
-            <span>
-              {openCount} open merge suggestion{openCount === 1 ? "" : "s"} for
-              this contact.
-            </span>
-          </div>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/merge">Review</Link>
-          </Button>
-        </div>
+        <MergeSuggestionsPanel
+          personId={personId}
+          suggestions={suggestionsQuery.data ?? []}
+          isLoading={suggestionsQuery.isLoading}
+        />
       ) : null}
 
       <div className="flex justify-end">
@@ -191,6 +185,67 @@ export function Contact360({ personId }: { personId: string }) {
           <SourcesTab person={person} />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function MergeSuggestionsPanel({
+  personId,
+  suggestions,
+  isLoading,
+}: {
+  personId: string;
+  suggestions: Array<{
+    id: string;
+    newPersonId: string;
+    targetPersonId: string;
+    matchedOn: unknown;
+    status: string;
+    createdAt?: string;
+    reportImportId?: string;
+  }>;
+  isLoading: boolean;
+}) {
+  return (
+    <div
+      id="merge-suggestions"
+      className="space-y-3 rounded-lg border border-amber-300/60 bg-amber-50/80 p-3 dark:border-amber-700/50 dark:bg-amber-950/40"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <div className="flex items-center gap-2">
+          <GitMerge className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+          <span className="font-medium">
+            {suggestions.length} open merge suggestion
+            {suggestions.length === 1 ? "" : "s"} for this contact
+          </span>
+        </div>
+        <Button asChild size="sm" variant="outline">
+          <Link href="/merge">Open full inbox</Link>
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Accept merges new → target (survivor). Dismiss keeps both. After accept,
+        review Sources on the survivor to confirm imports from both persons.
+      </p>
+      {isLoading ? (
+        <Skeleton className="h-32 w-full" />
+      ) : (
+        <ul className="space-y-3">
+          {suggestions.map((s) => (
+            <li key={s.id}>
+              <MergeSuggestionCard
+                suggestion={s}
+                // If this person is the target, stay on Sources after accept
+                acceptNavigateTo={
+                  s.targetPersonId === personId
+                    ? `/contacts/${personId}?tab=sources`
+                    : undefined
+                }
+              />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

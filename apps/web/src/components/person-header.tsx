@@ -46,13 +46,13 @@ export function PersonHeader({
               </span>
             ) : null}
             {openSuggestionCount > 0 ? (
-              <Link href="/merge">
+              <a href="#merge-suggestions">
                 <Badge variant="warning" className="gap-1">
                   <GitMerge className="h-3 w-3" />
                   {openSuggestionCount} open suggestion
                   {openSuggestionCount === 1 ? "" : "s"}
                 </Badge>
-              </Link>
+              </a>
             ) : null}
           </div>
         </div>
