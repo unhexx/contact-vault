@@ -1,0 +1,21 @@
+# Contributing
+
+## For everyone
+
+1. Read `docs/00-OVERVIEW.md`
+2. Read `docs/06-ENGINEERING/Agent-Playbook.md` (mandatory for agents)
+3. Prefer small, focused changes
+4. Update docs when domain or behavior changes
+
+## Neural-network agents
+
+- Types / Zod schemas first
+- Provenance is mandatory on every fact
+- Fixture tests for **each** parser format (`void-html`, `sectioned-text`)
+- Never commit real PII
+- Follow Definition of Done in the Agent Playbook
+- New text report keys → update alias table in Report-Mapping + `keyAliases.ts`
+
+## Humans
+
+Feature branch → PR against `main`.

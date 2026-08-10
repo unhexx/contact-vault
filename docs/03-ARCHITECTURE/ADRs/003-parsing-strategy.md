@@ -1,96 +1,43 @@
-# ADR-003: Multi-Format Parsing Strategy
+# ADR-003: Parsing Strategy (Multi-Format)
 
 **Status:** Accepted  
 **Date:** 2026-08-10  
-**Deciders:** Team
-
-## Context
-
-Contact Vault must ingest person dossiers from at least two observed export formats produced by Void-style tools:
-
-1. **Void HTML SPA report** — self-contained HTML with embedded JSON payload (`status`/`data` with `profile`, `groups`, `addresses`, …).
-2. **Sectioned plain-text report** — UTF-8 text file with blocks delimited by `=== Source Name [Year] ===` and `Key: Value` lines under each block. First block is often `=== Общая сводка ===` (aggregated multi-value summary).
-
-Both formats describe the same underlying domain concepts and must converge on the same domain model and Provenance structure.
+**Updated:** 2026-08-10 — added sectioned-text format
 
 ## Decision
 
+Support two first-class input formats that both produce the same domain DTOs.
+
 ### Format detection
 
-```ts
-function detectReportFormat(input: string | Buffer): "void-html" | "sectioned-text" | "unknown"
-```
+| Signal | Format |
+|--------|--------|
+| HTML doctype / `__report_embed__` / Void SPA markers | `void-html` |
+| ≥1 line matching `=== ... ===` | `sectioned-text` |
+| Otherwise | `unknown` (reject or best-effort) |
 
-- If content contains `<html` / `<script` and a JSON payload matching the Void shape → `void-html`
-- If content matches `/^=== .+ ===\s*$/m` (multiple section headers) → `sectioned-text`
-- Otherwise → `unknown` (reject or manual override)
+### void-html pipeline
 
-### Parser package layout
+1. Extract embedded JSON (`__REPORT_EMBED__` / `#__report_embed__`)
+2. If missing → structural DOM parse of known cards
+3. Map collectors → domain DTOs + provenance
 
-```
-packages/parser/
-  src/
-    detect-format.ts
-    void-html/          # extract embedded JSON → RawReport
-    sectioned-text/     # split sections → RawReport
-    normalize/          # RawReport → domain facts / Person draft (shared)
-    index.ts            # public parseReport(input) → ParseResult
-```
+### sectioned-text pipeline
 
-Both format-specific parsers emit the **same intermediate** `RawReport`:
+1. Split into sections by `=== Title ===` headers
+2. Parse key: value lines; support multi-value (comma-separated) and multi-record sections
+3. Apply Russian key alias table → domain fields
+4. Treat `Общая сводка` as seed summary
+5. Unknown keys → `extras` bag (never drop)
+6. Related-person heuristic (different FIO+DOB sharing phone) → Relationship or Person stub
 
-```ts
-type RawReport = {
-  format: "void-html" | "sectioned-text";
-  query?: string;
-  contentHash: string;
-  summary?: Record<string, string[]>;   // from Общая сводка or profile
-  sources: Array<{
-    name: string;                       // e.g. "Клиенты T2.ru 2024"
-    records: Array<Record<string, string>>;
-  }>;
-  raw?: unknown;                        // original payload for debugging
-};
-```
+### Shared rules
 
-The shared normalizer is the single place that:
-- Maps Russian keys → domain fields (alias table)
-- Parses FIO + embedded DOB
-- Normalizes phones to E.164
-- Detects document types (passport / snils / oms / inn…)
-- Builds Provenance for every fact
-- Emits domain objects / events
-
-### Sectioned-text specifics
-
-1. Split on `/^===\s*(.+?)\s*===\s*$/gm`
-2. Section titled (case-insensitive) `Общая сводка` / `Сводка` → `summary` (values split by `,` or `;`)
-3. All other sections → `sources[]`. Identical consecutive titles become multiple `records` under one source name.
-4. Lines parsed as `^([^:]+):\s*(.*)$` (trim). Empty values kept.
-5. Multi-record sources (ФОМС, T2.ru, DPD, credit history…) preserved as separate records.
-
-### Domain impact
-
-- No breaking changes to the Person aggregate.
-- Optional structured `meta` or `TelecomSubscription` for PIN/PUK/tariff history attached to the primary phone ContactPoint.
-- Related persons appearing in OMS/FOMS (e.g. child) → Relationship + relatedPersonHint (or candidate Person if strong identifiers present).
-- Phonebook aliases → NameVariant with low confidence + tag `phonebook` / `noise`.
-
-### Idempotency
-
-`contentHash = sha256(normalized text or JSON)`. Re-import of the same file is a no-op (or provenance refresh only).
+- Pure functions only inside `packages/parser` (no DB)
+- Every fact carries Provenance (`sourceName` = section/source title)
+- Idempotent by `sha256(payload)` + query fingerprint
+- Warnings array for ambiguous parses (agents must surface in UI later)
 
 ## Consequences
 
-**Positive**
-- Single domain pipeline for both formats
-- Easy to add a third format later (CSV, JSON API, etc.) by implementing another `* → RawReport` adapter
-- Agents have a clear extension point
-
-**Trade-offs**
-- Alias table for Russian keys must be maintained (document in Report-Mapping.md)
-- Some free-text fields will land in `rawAttributes` until promoted
-
-## Implementation notes for agents
-
-See `docs/02-DOMAIN/Report-Mapping.md` (Text format section) and `docs/06-ENGINEERING/Agent-Playbook.md`.
+One domain model, multiple report dialects. Agents can add a new text key alias without touching HTML parsers.

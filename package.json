@@ -1,0 +1,14 @@
+{
+  "name": "contact-vault",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Contact management platform with OSINT report ingestion (Void HTML + sectioned text)",
+  "scripts": {
+    "dev": "echo \"Workspace not fully scaffolded — see docs/07-ROADMAP/MVP-Scope.md\"",
+    "test": "echo \"TODO\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
