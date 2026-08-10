@@ -68,10 +68,11 @@ export function extractExactMatchKeys(draft: PersonDraft): ExactMatchKey[] {
 
   for (const cp of draft.contactPoints) {
     if (cp.kind === "phone") {
-      if (cp.e164) {
-        push({ kind: "phone", e164: cp.e164 });
+      // KD15: raw-only / blank e164 are not match keys
+      const e164 = cp.e164?.trim();
+      if (e164) {
+        push({ kind: "phone", e164 });
       }
-      // KD15: raw-only phones are not match keys
     } else if (cp.kind === "email") {
       push({ kind: "email", value: normalizeEmail(cp.value) });
     }
@@ -95,20 +96,28 @@ export type ExactMatchHit = {
 
 /**
  * Score which exact keys from a draft hit a candidate's stored norms.
- * Value strings are the normalized forms used for matching.
+ * Value strings in hits are the draft-key normalized forms.
+ *
+ * Defense in depth: candidate emails and document numbers are re-normalized
+ * via `normalizeEmail` / `normalizeDocumentNumber` so callers may pass display
+ * or already-normed values. Phones are compared as e164 strings (trim only).
  */
 export function scoreExactMatches(
   draftKeys: ExactMatchKey[],
   candidate: {
-    phones: string[]; // e164 list
-    emails: string[]; // emailNorm list
-    documents: Array<{ type: string; number: string }>; // numberNorm
+    phones: string[]; // e164 list (trimmed for compare)
+    emails: string[]; // emailNorm or display — re-normalized
+    documents: Array<{ type: string; number: string }>; // numberNorm or raw — re-normalized
   },
 ): ExactMatchHit[] {
-  const phoneSet = new Set(candidate.phones);
+  const phoneSet = new Set(
+    candidate.phones.map((p) => p.trim()).filter(Boolean),
+  );
   const emailSet = new Set(candidate.emails.map(normalizeEmail));
   const docSet = new Set(
-    candidate.documents.map((d) => `${d.type}:${d.number}`),
+    candidate.documents.map(
+      (d) => `${d.type}:${normalizeDocumentNumber(d.type, d.number)}`,
+    ),
   );
 
   const hits: ExactMatchHit[] = [];

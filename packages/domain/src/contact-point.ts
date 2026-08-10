@@ -4,13 +4,14 @@ import { ProvenanceSchema } from "./provenance.js";
 /**
  * Phone ContactPoint: e164 optional when normalization fails (KD15).
  * Prefer keep raw; exact-match only uses defined e164.
+ * Whitespace-only e164/raw is rejected (trim + min(1)).
  */
 const PhoneContactPointSchema = z
   .object({
     kind: z.literal("phone"),
     /** E.164 when normalization succeeds; omit/undefined when only raw kept */
-    e164: z.string().min(1).optional(),
-    raw: z.string().optional(),
+    e164: z.string().trim().min(1).optional(),
+    raw: z.string().trim().min(1).optional(),
     isPrimary: z.boolean().optional(),
     tags: z.array(z.string()).optional(),
     meta: z.record(z.unknown()).optional(),

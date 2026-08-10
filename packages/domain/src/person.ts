@@ -17,10 +17,10 @@ export const NameVariantSchema = z.object({
 export type NameVariant = z.infer<typeof NameVariantSchema>;
 
 /**
- * Parser output: no stable DB person id (KD5).
- * Optional tempId only; Person UUID assigned on insert by web/db.
+ * Shared Person field shape (draft + persisted).
+ * Draft uses `.strict()` so Person-only keys (id, sourceReports, …) are rejected (KD5).
  */
-export const PersonDraftSchema = z.object({
+const personFields = {
   tempId: z.string().optional(),
   canonicalName: NameVariantSchema.optional(),
   nameVariants: z.array(NameVariantSchema).default([]),
@@ -32,37 +32,47 @@ export const PersonDraftSchema = z.object({
   addresses: z.array(AddressSchema).default([]),
   relationships: z.array(RelationshipSchema).default([]),
   extras: z.record(z.unknown()).optional(),
-});
+} as const;
+
+/**
+ * Parser output: no stable DB person id (KD5).
+ * Optional tempId only; Person UUID assigned on insert by web/db.
+ * Strict: unknown keys (including `id` / `sourceReports`) fail parse.
+ */
+export const PersonDraftSchema = z.object(personFields).strict();
 
 export type PersonDraft = z.infer<typeof PersonDraftSchema>;
 
 /**
  * Persisted aggregate for API/UI: stable UUID, timestamps, source reports.
  */
-export const PersonSchema = PersonDraftSchema.extend({
-  id: z.string().uuid(),
-  sourceReports: z.array(
-    z.object({
-      reportId: z.string().uuid(), // ReportImport.id
-      query: z.string(),
-      contentHash: z.string(),
-      importedAt: z.string(),
-      mode: z
-        .enum([
-          "void_html",
-          "text_export",
-          "inline_dossier",
-          "telegram",
-          "fio",
-          "facesearch",
-          "other",
-        ])
-        .optional(),
-    }),
-  ),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  deletedAt: z.string().nullable().optional(),
-});
+export const PersonSchema = z
+  .object({
+    ...personFields,
+    id: z.string().uuid(),
+    sourceReports: z.array(
+      z.object({
+        reportId: z.string().uuid(), // ReportImport.id
+        query: z.string(),
+        contentHash: z.string(),
+        importedAt: z.string(),
+        mode: z
+          .enum([
+            "void_html",
+            "text_export",
+            "inline_dossier",
+            "telegram",
+            "fio",
+            "facesearch",
+            "other",
+          ])
+          .optional(),
+      }),
+    ),
+    createdAt: z.string(),
+    updatedAt: z.string(),
+    deletedAt: z.string().nullable().optional(),
+  })
+  .strict();
 
 export type Person = z.infer<typeof PersonSchema>;

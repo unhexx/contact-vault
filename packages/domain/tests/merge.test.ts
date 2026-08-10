@@ -5,6 +5,7 @@ import {
   normalizeEmail,
   scoreExactMatches,
 } from "../src/merge.js";
+import type { ContactPoint } from "../src/contact-point.js";
 import type { PersonDraft } from "../src/person.js";
 import type { Provenance } from "../src/provenance.js";
 
@@ -208,5 +209,43 @@ describe("scoreExactMatches", () => {
         documents: [],
       }),
     ).toEqual([]);
+  });
+
+  it("re-normalizes candidate emails and document numbers (defense in depth)", () => {
+    const draftKeys = extractExactMatchKeys(
+      draft({
+        contactPoints: [
+          { kind: "email", value: "x@y.ru", provenance: [prov] },
+        ],
+        documents: [
+          { type: "snils", number: "000-000-000 00", provenance: [prov] },
+        ],
+      }),
+    );
+
+    const hits = scoreExactMatches(draftKeys, {
+      phones: [],
+      emails: ["  X@Y.RU  "],
+      documents: [{ type: "snils", number: "000-000-000 00" }],
+    });
+
+    expect(hits).toEqual([
+      { field: "email", value: "x@y.ru" },
+      { field: "document", value: "snils:00000000000" },
+    ]);
+  });
+
+  it("skips blank/whitespace e164 on draft phones", () => {
+    const blankPhone = {
+      kind: "phone" as const,
+      e164: "   ",
+      provenance: [prov],
+    } as ContactPoint;
+    const keys = extractExactMatchKeys(
+      draft({
+        contactPoints: [blankPhone],
+      }),
+    );
+    expect(keys).toEqual([]);
   });
 });
