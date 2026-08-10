@@ -12,9 +12,18 @@
 - Types / Zod schemas first
 - Provenance is mandatory on every fact
 - Fixture tests for **each** parser format (`void-html`, `sectioned-text`)
-- Never commit real PII
+- Never commit real PII — only synthetic data in `packages/parser/fixtures/` and `samples/`
+- Run `pnpm check:fixtures` before commit when touching fixtures/samples
 - Follow Definition of Done in the Agent Playbook
 - New text report keys → update alias table in Report-Mapping + `keyAliases.ts`
+
+## Local verification
+
+```bash
+pnpm typecheck && pnpm test && pnpm check:fixtures
+# with Docker Postgres:
+pnpm smoke
+```
 
 ## Humans
 

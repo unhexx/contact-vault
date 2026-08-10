@@ -1,0 +1,261 @@
+// Contact Vault — Prisma schema (PR3)
+// Soft-delete on Person root; provenance JSONB on facts; emailNorm / numberNorm for exact match.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ReportFormat {
+  void_html      @map("void-html")
+  sectioned_text @map("sectioned-text")
+  unknown
+}
+
+enum ReportImportStatus {
+  pending
+  parsed
+  completed
+  failed
+}
+
+enum DocumentType {
+  passport_ru
+  passport_foreign
+  snils
+  inn
+  oms
+  driving_license
+  birth_cert
+  military
+  other
+}
+
+enum AddressCategory {
+  registration
+  residence
+  delivery
+  work
+  other
+}
+
+enum RelationshipType {
+  family
+  possible
+  colleague
+  neighbor
+  other
+}
+
+enum ContactPointKind {
+  phone
+  email
+  social
+  messenger
+}
+
+model Person {
+  id              String    @id @default(uuid()) @db.Uuid
+  canonicalFull   String?
+  canonicalLast   String?
+  canonicalFirst  String?
+  canonicalMiddle String?
+  dateOfBirth     String?
+  placeOfBirth    String?
+  gender          String?
+  extras          Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  contactPoints            ContactPoint[]
+  documents                IdentityDocument[]
+  addresses                Address[]
+  relationships            Relationship[]
+  nameVariants             NameVariant[]
+  sourceReports            PersonSourceReport[]
+  mergeSuggestionsAsTarget MergeSuggestion[]    @relation("SuggestionTarget")
+  mergeSuggestionsAsNew    MergeSuggestion[]    @relation("SuggestionNew")
+
+  @@index([deletedAt])
+  @@index([canonicalFull])
+  @@index([dateOfBirth])
+  @@index([updatedAt, id]) // list cursor order
+}
+
+model NameVariant {
+  id         String   @id @default(uuid()) @db.Uuid
+  personId   String   @db.Uuid
+  person     Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+  full       String
+  last       String?
+  first      String?
+  middle     String?
+  dobHint    String?
+  provenance Json
+  createdAt  DateTime @default(now())
+
+  @@index([personId])
+  @@index([full])
+}
+
+model ContactPoint {
+  id          String           @id @default(uuid()) @db.Uuid
+  personId    String           @db.Uuid
+  person      Person           @relation(fields: [personId], references: [id], onDelete: Cascade)
+  kind        ContactPointKind
+  e164        String?
+  raw         String?
+  email       String? // display / original casing
+  emailNorm   String? // lower(trim(email)) — exact match index
+  network     String?
+  username    String?
+  url         String?
+  identifier  String?
+  displayName String?
+  isPrimary   Boolean          @default(false)
+  tags        String[]         @default([])
+  meta        Json?
+  provenance  Json
+  createdAt   DateTime         @default(now())
+  deletedAt   DateTime?
+
+  @@index([personId])
+  @@index([e164])
+  @@index([emailNorm])
+  @@index([kind, identifier])
+}
+
+model IdentityDocument {
+  id             String       @id @default(uuid()) @db.Uuid
+  personId       String       @db.Uuid
+  person         Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
+  type           DocumentType
+  number         String
+  numberNorm     String
+  series         String?
+  issuedAt       String?
+  issuedBy       String?
+  departmentCode String?
+  validUntil     String?
+  status         String?
+  meta           Json?
+  provenance     Json
+  createdAt      DateTime     @default(now())
+  deletedAt      DateTime?
+
+  @@index([personId])
+  @@unique([type, numberNorm, personId])
+  @@index([type, numberNorm])
+}
+
+model Address {
+  id         String          @id @default(uuid()) @db.Uuid
+  personId   String          @db.Uuid
+  person     Person          @relation(fields: [personId], references: [id], onDelete: Cascade)
+  raw        String
+  normalized String?
+  category   AddressCategory
+  periodFrom String?
+  periodTo   String?
+  components Json?
+  geo        Json?
+  provenance Json
+  createdAt  DateTime        @default(now())
+  deletedAt  DateTime?
+
+  @@index([personId])
+}
+
+model Relationship {
+  id                String           @id @default(uuid()) @db.Uuid
+  personId          String           @db.Uuid
+  person            Person           @relation(fields: [personId], references: [id], onDelete: Cascade)
+  type              RelationshipType
+  relationLabel     String?
+  // Optional UUID of another Person — intentional bare field (no Prisma @relation) in v0.1
+  relatedPersonId   String?          @db.Uuid
+  relatedPersonHint Json
+  sharedAddress     String?
+  strength          Float?
+  provenance        Json
+  createdAt         DateTime         @default(now())
+  deletedAt         DateTime?
+
+  @@index([personId])
+  @@index([relatedPersonId])
+}
+
+model ReportImport {
+  id           String             @id @db.Uuid // caller-generated UUID before parse (set explicitly)
+  format       ReportFormat
+  status       ReportImportStatus @default(pending)
+  filename     String?
+  contentHash  String             @unique
+  reportQuery  String?
+  byteSize     Int?
+  warnings     Json               @default("[]")
+  errorMessage String?
+  // v0.1 default: null. When STORE_RAW_REPORTS=true, filesystem path under data/reports/{id}.bin
+  rawStorage   String?
+  createdAt    DateTime           @default(now())
+  completedAt  DateTime?
+
+  personLinks      PersonSourceReport[]
+  mergeSuggestions MergeSuggestion[]
+
+  @@index([createdAt])
+}
+
+model PersonSourceReport {
+  id             String       @id @default(uuid()) @db.Uuid
+  personId       String       @db.Uuid
+  person         Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
+  reportImportId String       @db.Uuid
+  reportImport   ReportImport @relation(fields: [reportImportId], references: [id], onDelete: Cascade)
+  query          String
+  contentHash    String // same algorithm/value as ReportImport.contentHash
+  mode           String?
+  importedAt     DateTime     @default(now())
+
+  @@unique([personId, reportImportId])
+  @@index([reportImportId])
+}
+
+model MergeSuggestion {
+  id             String       @id @default(uuid()) @db.Uuid
+  reportImportId String       @db.Uuid
+  reportImport   ReportImport @relation(fields: [reportImportId], references: [id], onDelete: Cascade)
+  targetPersonId String       @db.Uuid
+  targetPerson   Person       @relation("SuggestionTarget", fields: [targetPersonId], references: [id], onDelete: Cascade)
+  newPersonId    String       @db.Uuid // always set: person created from this import
+  newPerson      Person       @relation("SuggestionNew", fields: [newPersonId], references: [id], onDelete: Cascade)
+  matchedOn      Json
+  status         String       @default("open") // open | accepted | dismissed
+  createdAt      DateTime     @default(now())
+  resolvedAt     DateTime?
+
+  @@index([targetPersonId, status])
+  @@index([newPersonId, status])
+  @@index([reportImportId])
+  // Prevent duplicate suggestions for same import pair (PR5 race defense)
+  @@unique([reportImportId, newPersonId, targetPersonId])
+  // CHECK (newPersonId <> targetPersonId) applied in migration 0002 (Prisma has no CHECK DSL)
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  action     String // merge | soft_delete | import  (unmerge reserved for v0.2)
+  actor      String   @default("local")
+  entityType String
+  entityId   String
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

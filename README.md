@@ -1,53 +1,135 @@
 # Contact Vault
 
-**Contact management platform with OSINT report ingestion (Void Search compatible).**
+**Contact management platform with OSINT report ingestion (Void HTML + sectioned text).**
 
-Designed for collaborative development by neural network agents. Parses rich person dossiers into a best-practice CRM domain model with full provenance, intelligent merge/dedup, and a modern responsive UI.
+Version **0.1.0** — strict MVP: dual-format import, Person 360 with provenance, exact-match merge *suggestions* (no silent auto-merge).
 
-> **Status:** Project documentation & scaffold phase. Implementation by AI agents follows the Agent Playbook.
+Designed for collaborative development by neural network agents. Parses person dossiers into a CRM domain model with full provenance, explicit merge control, and a modern responsive UI.
 
 ## Vision
 
 Turn complex, multi-source person reports (Void Search HTML/JSON exports and similar) into a clean, queryable, auditable contact graph that feels as responsive and intuitive as modern personal CRMs while preserving every original fact and its source.
 
-## Core Capabilities (MVP)
+## Core Capabilities (v0.1)
 
-- **Ingest** Void Search-style HTML reports (primary: embedded JSON payload)
-- **Normalize** into a rich Person aggregate with ContactPoints, IdentityDocuments, Addresses, Vehicles, Relationships, Financials, Travel, etc.
-- **Provenance** on every fact (report, source name, original key/value, confidence, timestamps)
-- **Merge & Deduplicate** people by phone / email / passport / FIO+DOB with explicit user control and audit trail
-- **360° Contact View** — fast, keyboard-friendly, copy-everywhere, faceted sources, timeline
-- **Responsive** dark/light UI built with Next.js 15 + shadcn/ui
+- **Ingest** Void HTML (`void-html`) and sectioned plain-text (`sectioned-text`) reports
+- **Normalize** into Person + ContactPoints, IdentityDocuments, Addresses, Relationships
+- **Provenance** on every fact (report, source name, original key/value, timestamps)
+- **Merge suggestions** by exact phone / email / document — user confirms; no silent merge
+- **360° Contact View** — Overview / Identity / Documents / Addresses / Network / Sources; copy-on-click
+- **Responsive** dark/light UI — Next.js 15 + shadcn/ui
 
-## Tech Stack (see ADR-001)
+## Tech Stack (ADR-001)
 
 | Layer | Choice |
 |-------|--------|
 | Language | TypeScript (strict) |
 | Monorepo | pnpm + Turborepo |
 | Frontend | Next.js 15 (App Router) + React 19 + Tailwind + shadcn/ui |
-| API | tRPC |
-| Database | PostgreSQL + Prisma |
-| Validation | Zod (shared) |
-| Parser | Dedicated package, JSON-first + Cheerio fallback |
+| API | tRPC (hosted in Next.js) |
+| Database | PostgreSQL 16 + Prisma |
+| Validation | Zod (`@contact-vault/domain`) |
+| Parser | `@contact-vault/parser` (pure; no DB) |
 | State | TanStack Query + Zustand |
 
-## Repository Layout (target)
+## Repository Layout
 
 ```
 contact-vault/
-├── apps/
-│   ├── web/                 # Next.js application
-│   └── api/                 # optional standalone if needed
+├── apps/web/                 # Next.js 15 + tRPC + UI
 ├── packages/
-│   ├── domain/              # pure types, Zod schemas, domain logic
-│   ├── parser/              # Void report → domain
-│   ├── db/                  # Prisma schema + client
-│   └── ui/                  # shared UI primitives
-├── docs/                   # Full project documentation (start here)
-├── prisma/
-└── ...
+│   ├── domain/               # Zod schemas, contentHash, merge helpers
+│   ├── parser/               # void-html + sectioned-text pipelines
+│   ├── db/                   # Prisma schema + repositories
+│   └── ui/                   # empty stub (v0.1 UI lives in apps/web)
+├── samples/                  # synthetic reports (both formats)
+├── scripts/                  # smoke-import + check-fixtures
+├── docs/                     # product, domain, architecture, playbook
+├── docker-compose.yml
+└── .env.example
 ```
+
+## Local run (runbook)
+
+### Prerequisites
+
+- Node.js ≥ 20
+- pnpm 9.15.0 (`corepack enable` or install via [pnpm.io](https://pnpm.io))
+- Docker (for PostgreSQL)
+
+### 1. Install
+
+```bash
+pnpm install
+cp .env.example .env
+```
+
+### 2. Database
+
+```bash
+docker compose up -d
+pnpm db:generate
+pnpm db:migrate          # interactive dev migrations
+# or non-interactive:
+pnpm db:migrate:deploy
+```
+
+Default connection (see `.env.example`):
+
+```text
+DATABASE_URL=postgresql://contactvault:contactvault@localhost:5432/contactvault
+```
+
+Postgres is bound to `127.0.0.1:5432` only (not all interfaces).
+
+### 3. Dev server
+
+```bash
+pnpm dev
+# → http://127.0.0.1:3000
+```
+
+### 4. Quality gates
+
+```bash
+pnpm typecheck
+pnpm test
+pnpm check:fixtures   # forbid-list: no non-synthetic markers in fixtures/samples
+pnpm smoke            # dual import + re-import + merge path (requires Postgres)
+```
+
+### Optional env
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DATABASE_URL` | (required) | Prisma connection string |
+| `STORE_RAW_REPORTS` | `false` | When `true`, write raw bodies to `data/reports/{id}.bin` (gitignored) |
+| `NEXT_PUBLIC_APP_URL` | — | Optional public base URL |
+| `SKIP_DB_TESTS` | — | Set `1` to skip Postgres integration tests |
+
+## Samples
+
+Synthetic only — never commit real PII (see [Data-Handling](docs/08-LEGAL-ETHICS/Data-Handling.md)).
+
+| Path | Format |
+|------|--------|
+| `samples/sectioned-text/person-basic.txt` | sectioned-text |
+| `samples/sectioned-text/person-variant-shared-phone.txt` | sectioned-text (shares phone with basic — for merge demos) |
+| `samples/void-html/person-basic.embed.html` | void-html |
+
+Parser unit fixtures live under `packages/parser/fixtures/` (same synthetic policy).
+
+## Manual smoke checklist (release gate)
+
+Playwright is **not** required for v0.1. Use the UI and/or `pnpm smoke`:
+
+1. Import `samples/sectioned-text/person-basic.txt` → format `sectioned-text`, person in list.
+2. Import `samples/void-html/person-basic.embed.html` → format `void-html`.
+3. Open Contact 360; copy phone; check source badges.
+4. Re-import the same file → `duplicate: true`.
+5. Import `samples/sectioned-text/person-variant-shared-phone.txt` → merge suggestions (no self-suggestion); Accept or Dismiss.
+6. After Accept: survivor **Sources** lists report imports from both persons.
+7. Soft-delete hides contact from list; 360 returns not found.
 
 ## Documentation Map
 
@@ -56,21 +138,15 @@ contact-vault/
 | [docs/00-OVERVIEW.md](docs/00-OVERVIEW.md) | Project orientation for agents |
 | [docs/01-PRODUCT/PRD.md](docs/01-PRODUCT/PRD.md) | Product requirements |
 | [docs/02-DOMAIN/Domain-Model.md](docs/02-DOMAIN/Domain-Model.md) | Aggregates, entities, value objects |
-| [docs/02-DOMAIN/Report-Mapping.md](docs/02-DOMAIN/Report-Mapping.md) | Void → Domain mapping |
+| [docs/02-DOMAIN/Report-Mapping.md](docs/02-DOMAIN/Report-Mapping.md) | Void / text → domain mapping |
 | [docs/03-ARCHITECTURE/](docs/03-ARCHITECTURE/) | Architecture + ADRs |
 | [docs/06-ENGINEERING/Agent-Playbook.md](docs/06-ENGINEERING/Agent-Playbook.md) | **How NN agents must work** |
-| [docs/07-ROADMAP/MVP-Scope.md](docs/07-ROADMAP/MVP-Scope.md) | What to build first |
-
-## Getting Started (once scaffolded)
-
-```bash
-pnpm install
-pnpm dev
-```
+| [docs/07-ROADMAP/MVP-Scope.md](docs/07-ROADMAP/MVP-Scope.md) | What to build first (checklist complete for 0.1) |
+| [docs/08-LEGAL-ETHICS/Data-Handling.md](docs/08-LEGAL-ETHICS/Data-Handling.md) | PII / fixtures policy |
 
 ## Ethics & Legal
 
-This tool is intended for legitimate contact management, due-diligence, and authorized investigation workflows. Users are responsible for compliance with applicable data-protection and privacy laws. The project documentation includes guidance on data handling and minimization.
+This tool is intended for legitimate contact management, due-diligence, and authorized investigation workflows. Users are responsible for compliance with applicable data-protection and privacy laws. Only **synthetic** fixtures may be committed.
 
 ## License
 
