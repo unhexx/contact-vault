@@ -26,7 +26,12 @@ export {
   parseFio,
   normalizeDate,
   mapDocumentType,
+  isLikelySamePerson,
+  classifyRelatedPerson,
 } from "./normalize/index.js";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Parse a report into domain DTOs.
@@ -40,6 +45,26 @@ export function parseReport(input: ParseReportInput): ParseResult {
   const detectedAt = new Date().toISOString();
   const format: ReportFormat = detectFormat(content, filename);
   const contentHash = contentHashOf(content);
+
+  if (!UUID_RE.test(reportId)) {
+    return {
+      format,
+      reportMeta: {
+        contentHash,
+        filename,
+        detectedAt,
+      },
+      persons: [],
+      relationships: [],
+      warnings: [
+        {
+          code: "INVALID_REPORT_ID",
+          message: `reportId must be a UUID (got ${JSON.stringify(reportId)})`,
+          severity: "error",
+        },
+      ],
+    };
+  }
 
   if (format === "unknown") {
     return {

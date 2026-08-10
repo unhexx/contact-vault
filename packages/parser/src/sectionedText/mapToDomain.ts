@@ -7,7 +7,12 @@ import type {
   Relationship,
 } from "@contact-vault/domain";
 import {
-  fioEquals,
+  normalizeDocumentNumber,
+  normalizeEmail,
+} from "@contact-vault/domain";
+import {
+  classifyRelatedPerson,
+  isLikelySamePerson,
   normalizeDate,
   normalizePhone,
   parseFio,
@@ -99,7 +104,7 @@ function flushPassport(
   if (acc.passportDraft.departmentCode) {
     doc.departmentCode = acc.passportDraft.departmentCode;
   }
-  acc.documents.push(doc);
+  addDocument(acc, doc);
   acc.passportDraft = {};
 }
 
@@ -113,48 +118,138 @@ function addPhone(
   warnings: ParseWarning[],
 ): void {
   const n = normalizePhone(raw);
+  const prov = makeProvenance({
+    reportId: ctx.reportId,
+    reportQuery: ctx.reportQuery,
+    sourceName,
+    section: sectionTitle,
+    originalKey,
+    originalValue: raw,
+    extractedAt: ctx.extractedAt,
+    ...(n.ok ? {} : { confidence: 0.5 }),
+  });
+
   if (n.ok) {
+    // Dedupe by e164 — merge provenance (shared post-processing)
+    const existing = acc.phones.find(
+      (p) => p.kind === "phone" && p.e164 === n.e164,
+    );
+    if (existing && existing.kind === "phone") {
+      existing.provenance.push(prov);
+      if (!existing.raw) existing.raw = n.raw;
+      return;
+    }
     acc.phones.push({
       kind: "phone",
       e164: n.e164,
       raw: n.raw,
-      provenance: [
-        makeProvenance({
-          reportId: ctx.reportId,
-          reportQuery: ctx.reportQuery,
-          sourceName,
-          section: sectionTitle,
-          originalKey,
-          originalValue: raw,
-          extractedAt: ctx.extractedAt,
-        }),
-      ],
+      provenance: [prov],
     });
+    return;
+  }
+
+  // Unnormalized: dedupe by raw string
+  const existingRaw = acc.phones.find(
+    (p) => p.kind === "phone" && !p.e164 && p.raw === n.raw,
+  );
+  if (existingRaw && existingRaw.kind === "phone") {
+    existingRaw.provenance.push(prov);
   } else {
     acc.phones.push({
       kind: "phone",
       raw: n.raw,
-      provenance: [
-        makeProvenance({
-          reportId: ctx.reportId,
-          reportQuery: ctx.reportQuery,
-          sourceName,
-          section: sectionTitle,
-          originalKey,
-          originalValue: raw,
-          extractedAt: ctx.extractedAt,
-          confidence: 0.5,
-        }),
-      ],
-    });
-    warnings.push({
-      code: "PHONE_UNNORMALIZED",
-      message: `Could not normalize phone to E.164: ${raw}`,
-      section: sectionTitle,
-      key: originalKey,
-      severity: "warn",
+      provenance: [prov],
     });
   }
+  warnings.push({
+    code: "PHONE_UNNORMALIZED",
+    message: `Could not normalize phone to E.164: ${raw}`,
+    section: sectionTitle,
+    key: originalKey,
+    severity: "warn",
+  });
+}
+
+function addEmail(
+  acc: Accumulator,
+  value: string,
+  ctx: MapContext,
+  sectionTitle: string,
+  sourceName: string,
+  originalKey: string,
+  confidence: number,
+): void {
+  const norm = normalizeEmail(value);
+  const existing = acc.emails.find(
+    (e) => e.kind === "email" && normalizeEmail(e.value) === norm,
+  );
+  const prov = makeProvenance({
+    reportId: ctx.reportId,
+    reportQuery: ctx.reportQuery,
+    sourceName,
+    section: sectionTitle,
+    originalKey,
+    originalValue: value,
+    extractedAt: ctx.extractedAt,
+    confidence,
+  });
+  if (existing && existing.kind === "email") {
+    existing.provenance.push(prov);
+    return;
+  }
+  acc.emails.push({
+    kind: "email",
+    value,
+    provenance: [prov],
+  });
+}
+
+function addDocument(
+  acc: Accumulator,
+  doc: IdentityDocument,
+): void {
+  const numberNorm = normalizeDocumentNumber(doc.type, doc.number);
+  const existing = acc.documents.find(
+    (d) =>
+      d.type === doc.type &&
+      normalizeDocumentNumber(d.type, d.number) === numberNorm,
+  );
+  if (existing) {
+    existing.provenance.push(...doc.provenance);
+    // Prefer longer / more complete metadata
+    if (!existing.issuedAt && doc.issuedAt) existing.issuedAt = doc.issuedAt;
+    if (!existing.issuedBy && doc.issuedBy) existing.issuedBy = doc.issuedBy;
+    if (!existing.departmentCode && doc.departmentCode) {
+      existing.departmentCode = doc.departmentCode;
+    }
+    return;
+  }
+  acc.documents.push(doc);
+}
+
+/**
+ * Pre-scan sections for the first normalizable phone → reportQuery seed.
+ * Ensures provenance.reportQuery is set before any makeProvenance call (Issue 1).
+ */
+export function seedReportQueryFromSections(
+  sections: TextSection[],
+  fallback?: string,
+): string | undefined {
+  if (fallback) return fallback;
+  for (const section of sections) {
+    const records = parseRecords(section.body);
+    for (const rec of records) {
+      for (const p of rec.pairs) {
+        if (resolveKeyAlias(p.key) !== "phone") continue;
+        for (const part of splitMultiValues(p.value, p.key)) {
+          const n = normalizePhone(part);
+          if (n.ok) return n.e164;
+          if (n.raw.trim()) return n.raw.trim();
+        }
+      }
+    }
+  }
+  return undefined;
 }
 
 function addName(
@@ -218,22 +313,7 @@ function applyPair(
     }
     case "email": {
       for (const part of splitMultiValues(value, key)) {
-        acc.emails.push({
-          kind: "email",
-          value: part,
-          provenance: [
-            makeProvenance({
-              reportId: ctx.reportId,
-              reportQuery: ctx.reportQuery,
-              sourceName,
-              section: sectionTitle,
-              originalKey: key,
-              originalValue: part,
-              extractedAt: ctx.extractedAt,
-              confidence: conf,
-            }),
-          ],
-        });
+        addEmail(acc, part, ctx, sectionTitle, sourceName, key, conf);
       }
       break;
     }
@@ -242,18 +322,55 @@ function applyPair(
       break;
     }
     case "personalities": {
-      // e.g. "Тестов Тест Тестович 15.01.1990" or comma-separated list
+      // «Личности» list: same-person variants → nameVariants;
+      // clearly different FIO+DOB → Relationship only (KD17; Issue 4).
       for (const part of splitMultiValues(value, key)) {
         const dobMatch = part.match(
           /^(.+?)\s+(\d{1,2}[./]\d{1,2}[./]\d{4}|\d{4}-\d{2}-\d{2})$/,
         );
-        if (dobMatch) {
-          const fio = dobMatch[1]!.trim();
-          const dob = normalizeDate(dobMatch[2]!) ?? dobMatch[2]!;
+        const fio = dobMatch ? dobMatch[1]!.trim() : part.trim();
+        const dob = dobMatch
+          ? (normalizeDate(dobMatch[2]!) ?? dobMatch[2]!)
+          : undefined;
+
+        const primaryFio = acc.canonicalName?.full;
+        const primaryDob = acc.dateOfBirth;
+        const verdict = classifyRelatedPerson(primaryFio, primaryDob, fio, dob);
+
+        if (verdict.kind === "same" || !primaryFio) {
           addName(acc, fio, ctx, sectionTitle, sourceName, key, dob, conf);
-          if (!acc.dateOfBirth) acc.dateOfBirth = dob;
+          if (dob && !acc.dateOfBirth) acc.dateOfBirth = dob;
         } else {
-          addName(acc, part, ctx, sectionTitle, sourceName, key, undefined, conf);
+          // Related or ambiguous → Relationship hint only (not NameVariant of primary)
+          acc.relationships.push({
+            type: "family",
+            relationLabel: "related",
+            relatedPersonHint: {
+              fio,
+              ...(dob ? { dob } : {}),
+            },
+            provenance: [
+              makeProvenance({
+                reportId: ctx.reportId,
+                reportQuery: ctx.reportQuery,
+                sourceName,
+                section: sectionTitle,
+                originalKey: key,
+                originalValue: part,
+                extractedAt: ctx.extractedAt,
+                confidence: conf,
+              }),
+            ],
+          });
+          if (verdict.kind === "ambiguous") {
+            warnings.push({
+              code: "AMBIGUOUS_RECORD",
+              message: `Личности entry "${fio}" classified as related (${verdict.reason})`,
+              section: sectionTitle,
+              key,
+              severity: "warn",
+            });
+          }
         }
       }
       break;
@@ -302,7 +419,7 @@ function applyPair(
     }
     case "snils": {
       for (const part of splitMultiValues(value, key)) {
-        acc.documents.push({
+        addDocument(acc, {
           type: "snils",
           number: part,
           provenance: [
@@ -323,7 +440,7 @@ function applyPair(
     }
     case "inn": {
       for (const part of splitMultiValues(value, key)) {
-        acc.documents.push({
+        addDocument(acc, {
           type: "inn",
           number: part,
           provenance: [
@@ -344,7 +461,7 @@ function applyPair(
     }
     case "oms": {
       for (const part of splitMultiValues(value, key)) {
-        acc.documents.push({
+        addDocument(acc, {
           type: "oms",
           number: part,
           provenance: [
@@ -364,7 +481,7 @@ function applyPair(
       break;
     }
     case "driving_license": {
-      acc.documents.push({
+      addDocument(acc, {
         type: "driving_license",
         number: value,
         provenance: [
@@ -500,6 +617,9 @@ function applyRecordToPrimary(
 
 /**
  * Map all sections → single PersonDraft; related multi-records → Relationship only (KD17).
+ *
+ * Pass 1: seed reportQuery from first phone so all provenance carries it (Issue 1).
+ * Pass 2: map facts; same-person name variants keep documents; distinct FIO → Relationship.
  */
 export function mapSectionsToDomain(
   sections: TextSection[],
@@ -512,7 +632,6 @@ export function mapSectionsToDomain(
 } {
   const warnings: ParseWarning[] = [];
   const acc = emptyAcc();
-  let reportQuery = ctx.reportQuery;
 
   if (sections.length === 0) {
     warnings.push({
@@ -531,6 +650,10 @@ export function mapSectionsToDomain(
     summaryIdx >= 0
       ? [sections[summaryIdx]!, ...sections.filter((_, i) => i !== summaryIdx)]
       : sections;
+
+  // Pass 1 — reportQuery before any provenance (Issue 1)
+  const reportQuery = seedReportQueryFromSections(ordered, ctx.reportQuery);
+  const mapCtx: MapContext = { ...ctx, reportQuery };
 
   let primaryFio: string | undefined;
   let primaryDob: string | undefined;
@@ -562,19 +685,15 @@ export function mapSectionsToDomain(
         primaryDob = dob ?? acc.dateOfBirth;
       }
 
-      // KD17: if FIO+DOB clearly differ from primary → Relationship only
-      if (
-        primaryFio &&
-        fio &&
-        !fioEquals(fio, primaryFio) &&
-        // Require DOB mismatch or missing shared identity when both have DOB
-        (dob === undefined ||
-          primaryDob === undefined ||
-          dob !== primaryDob ||
-          !fioEquals(fio, primaryFio))
-      ) {
-        // Only treat as related when FIO clearly differs
-        if (!fioEquals(fio, primaryFio)) {
+      // KD17: classify same vs related (token-subset / last+first = same person)
+      if (primaryFio && fio) {
+        const verdict = classifyRelatedPerson(
+          primaryFio,
+          primaryDob,
+          fio,
+          dob,
+        );
+        if (verdict.kind === "related" || verdict.kind === "ambiguous") {
           const relPhones: string[] = [];
           for (const p of rec.pairs) {
             if (resolveKeyAlias(p.key) === "phone") {
@@ -593,42 +712,52 @@ export function mapSectionsToDomain(
             },
             provenance: [
               makeProvenance({
-                reportId: ctx.reportId,
-                reportQuery: reportQuery ?? ctx.reportQuery,
+                reportId: mapCtx.reportId,
+                reportQuery: mapCtx.reportQuery,
                 sourceName,
                 section: section.title,
                 originalKey: "ФИО",
                 originalValue: fio,
-                extractedAt: ctx.extractedAt,
+                extractedAt: mapCtx.extractedAt,
               }),
             ],
           });
+          if (verdict.kind === "ambiguous") {
+            warnings.push({
+              code: "AMBIGUOUS_RECORD",
+              message: `Record "${fio}" treated as related (${verdict.reason})`,
+              section: section.title,
+              key: "ФИО",
+              severity: "warn",
+            });
+          }
           // Do not merge related person's documents into primary
           continue;
+        }
+
+        // same-person name variant: prefer longer FIO as primary label
+        if (
+          isLikelySamePerson(fio, primaryFio) &&
+          fio.trim().length > primaryFio.trim().length
+        ) {
+          primaryFio = fio;
         }
       }
 
       applyRecordToPrimary(
         acc,
         rec,
-        { ...ctx, reportQuery: reportQuery ?? ctx.reportQuery },
+        mapCtx,
         section.title,
         sourceName,
         warnings,
         isSummary,
       );
 
-      // Update primary DOB if we just set it
+      // Update primary DOB / FIO after apply
       if (!primaryDob && acc.dateOfBirth) primaryDob = acc.dateOfBirth;
       if (!primaryFio && acc.canonicalName) primaryFio = acc.canonicalName.full;
-
-      // Seed reportQuery from first phone
-      if (!reportQuery) {
-        const firstPhone = acc.phones.find((p) => p.kind === "phone");
-        if (firstPhone?.kind === "phone") {
-          reportQuery = firstPhone.e164 ?? firstPhone.raw;
-        }
-      }
+      if (acc.dateOfBirth && !primaryDob) primaryDob = acc.dateOfBirth;
     }
   }
 
@@ -638,19 +767,17 @@ export function mapSectionsToDomain(
     ...acc.socials,
   ];
 
-  const hasAny =
-    acc.canonicalName ||
-    contactPoints.length > 0 ||
-    acc.documents.length > 0 ||
-    acc.addresses.length > 0 ||
-    acc.relationships.length > 0 ||
-    acc.dateOfBirth ||
-    acc.placeOfBirth;
+  // Identity signal required for PersonDraft (fio / phone / email / document)
+  const hasIdentity =
+    Boolean(acc.canonicalName) ||
+    acc.phones.length > 0 ||
+    acc.emails.length > 0 ||
+    acc.documents.length > 0;
 
-  if (!hasAny) {
+  if (!hasIdentity) {
     return {
       person: null,
-      relationships: [],
+      relationships: [...acc.relationships],
       reportQuery,
       warnings,
     };

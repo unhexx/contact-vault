@@ -13,24 +13,21 @@ export function detectFormat(input: string, filename?: string): ReportFormat {
   const lowerName = (filename ?? "").toLowerCase();
 
   // Priority 1: Void HTML SPA / embed markers
+  // `/__report_embed__/i` covers both __report_embed__ and __REPORT_EMBED__
   if (
     /<!DOCTYPE\s+html/i.test(text) ||
     /__report_embed__/i.test(text) ||
-    /__REPORT_EMBED__/.test(text) ||
     (/\.html?$/.test(lowerName) && /<html[\s>]/i.test(text))
   ) {
     return "void-html";
   }
 
-  // Priority 2: sectioned plain text with === headers + mostly Key: value lines
+  // Priority 2: sectioned plain text with === headers + Key: value lines
   if (SECTION_HEADER_RE.test(text) && KEY_VALUE_RE.test(text)) {
     return "sectioned-text";
   }
 
-  // Filename-only weak hints when content is sparse
-  if (/\.html?$/.test(lowerName) && /<html[\s>]/i.test(text)) {
-    return "void-html";
-  }
+  // Weak filename hint for .txt with section headers but sparse KV density
   if (/\.txt$/i.test(lowerName) && SECTION_HEADER_RE.test(text)) {
     return "sectioned-text";
   }

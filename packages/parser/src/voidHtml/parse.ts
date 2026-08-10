@@ -41,7 +41,7 @@ export function parseVoidHtml(
   if (!collected.person) {
     return {
       persons: [],
-      relationships: [],
+      relationships: collected.orphanRelationships ?? [],
       reportQuery: collected.reportQuery,
       warnings,
     };

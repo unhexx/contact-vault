@@ -48,6 +48,8 @@ export type CollectPersonResult = {
   person: PersonDraft | null;
   reportQuery?: string;
   warnings: ParseWarning[];
+  /** Relationships when no PersonDraft (connections-only embed). */
+  orphanRelationships?: Relationship[];
 };
 
 /**
@@ -339,7 +341,7 @@ export function collectPersonFromEmbed(
     const relDob = asString(item.dob);
     const relation = asString(item.relation) ?? asString(item.type) ?? "related";
     relationships.push({
-      type: "family",
+      type: mapRelationType(relation),
       relationLabel: relation,
       relatedPersonHint: {
         ...(relFio ? { fio: relFio } : {}),
@@ -356,17 +358,29 @@ export function collectPersonFromEmbed(
     });
   }
 
-  const hasAny =
-    canonicalName ||
-    contactPoints.length > 0 ||
-    documents.length > 0 ||
-    addresses.length > 0 ||
-    relationships.length > 0 ||
-    dateOfBirth ||
-    placeOfBirth;
+  // Identity signal required for PersonDraft (fio / phone / email / document).
+  // Connections-only embed → no shell person (Issue 7).
+  const hasIdentity =
+    Boolean(canonicalName) ||
+    contactPoints.some((c) => c.kind === "phone" || c.kind === "email") ||
+    documents.length > 0;
 
-  if (!hasAny) {
-    return { person: null, reportQuery: query, warnings };
+  if (!hasIdentity) {
+    if (relationships.length > 0) {
+      warnings.push({
+        code: "NO_PRIMARY_IDENTITY",
+        message:
+          "Embed has connections/family but no profile identity (fio/phone/email/document); no PersonDraft emitted",
+        severity: "warn",
+      });
+    }
+    return {
+      person: null,
+      reportQuery: query,
+      warnings,
+      // surface relationships at top-level via caller when no person
+      orphanRelationships: relationships,
+    };
   }
 
   const person: PersonDraft = {
@@ -384,4 +398,45 @@ export function collectPersonFromEmbed(
   }
 
   return { person, reportQuery: query, warnings };
+}
+
+/** Map Russian/raw relation label → Relationship.type (Issue 10). */
+function mapRelationType(
+  relation: string,
+): Relationship["type"] {
+  const r = relation.trim().toLowerCase().replace(/ё/g, "е");
+  const familyHints = [
+    "семья",
+    "семей",
+    "ребенок",
+    "ребёнок",
+    "сын",
+    "дочь",
+    "доч",
+    "отец",
+    "мать",
+    "мама",
+    "папа",
+    "супруг",
+    "супруга",
+    "жена",
+    "муж",
+    "брат",
+    "сестра",
+    "бабуш",
+    "дедуш",
+    "внук",
+    "внуч",
+    "family",
+    "child",
+    "spouse",
+    "parent",
+  ];
+  if (familyHints.some((h) => r.includes(h))) return "family";
+  if (r.includes("коллег") || r.includes("colleague") || r.includes("работ")) {
+    return "colleague";
+  }
+  if (r.includes("сосед") || r.includes("neighbor")) return "neighbor";
+  if (r.includes("возможн") || r.includes("possible")) return "possible";
+  return "other";
 }

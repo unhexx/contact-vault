@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyRelatedPerson,
+  isLikelySamePerson,
   mapDocumentType,
   normalizeDate,
   normalizePhone,
@@ -78,5 +80,43 @@ describe("mapDocumentType", () => {
   it("maps snils", () => {
     expect(mapDocumentType("snils")).toBe("snils");
     expect(mapDocumentType("СНИЛС")).toBe("snils");
+  });
+});
+
+describe("isLikelySamePerson / classifyRelatedPerson (KD17)", () => {
+  it("treats 2-token vs 3-token (same last+first) as same person", () => {
+    expect(
+      isLikelySamePerson("Тестов Тест Тестович", "Тестов Тест"),
+    ).toBe(true);
+    expect(
+      classifyRelatedPerson(
+        "Тестов Тест Тестович",
+        "1990-01-15",
+        "Тестов Тест",
+        "1990-01-15",
+      ).kind,
+    ).toBe("same");
+  });
+
+  it("treats clearly different FIO+DOB as related", () => {
+    expect(
+      classifyRelatedPerson(
+        "Тестов Тест Тестович",
+        "1990-01-15",
+        "Тестова Анна Тестовна",
+        "2015-03-01",
+      ).kind,
+    ).toBe("related");
+  });
+
+  it("flags distinct FIO with matching DOB as ambiguous (related path)", () => {
+    expect(
+      classifyRelatedPerson(
+        "Тестов Тест Тестович",
+        "1990-01-15",
+        "Иванов Иван Иванович",
+        "1990-01-15",
+      ).kind,
+    ).toBe("ambiguous");
   });
 });
