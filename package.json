@@ -4,8 +4,20 @@
   "version": "0.0.1",
   "description": "Contact management platform with OSINT report ingestion (Void HTML + sectioned text)",
   "scripts": {
-    "dev": "echo \"Workspace not fully scaffolded — see docs/07-ROADMAP/MVP-Scope.md\"",
-    "test": "echo \"TODO\""
+    "dev": "turbo run dev --filter=@contact-vault/web",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "db:generate": "pnpm --filter @contact-vault/db db:generate",
+    "db:migrate": "pnpm --filter @contact-vault/db db:migrate",
+    "db:studio": "pnpm --filter @contact-vault/db db:studio"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   },
   "engines": {
     "node": ">=20"

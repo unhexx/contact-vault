@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: contactvault
+      POSTGRES_PASSWORD: contactvault
+      POSTGRES_DB: contactvault
+    volumes:
+      - cv_pg:/var/lib/postgresql/data
+
+volumes:
+  cv_pg:
