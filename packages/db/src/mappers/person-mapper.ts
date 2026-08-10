@@ -173,11 +173,29 @@ const SOURCE_MODES = [
 
 type SourceMode = (typeof SOURCE_MODES)[number];
 
-function mapSourceMode(mode: string | null | undefined): SourceMode | undefined {
+/**
+ * Normalize PersonSourceReport.mode to domain Person.sourceReports[].mode.
+ * Accepts ReportFormat aliases (sectioned_text, void-html) so 360 Sources keep signal.
+ */
+export function normalizeSourceMode(
+  mode: string | null | undefined,
+): SourceMode | undefined {
   if (!mode) return undefined;
+  const aliases: Record<string, SourceMode> = {
+    sectioned_text: "text_export",
+    "sectioned-text": "text_export",
+    void_html: "void_html",
+    "void-html": "void_html",
+    text_export: "text_export",
+  };
+  if (mode in aliases) return aliases[mode];
   return (SOURCE_MODES as readonly string[]).includes(mode)
     ? (mode as SourceMode)
     : "other";
+}
+
+function mapSourceMode(mode: string | null | undefined): SourceMode | undefined {
+  return normalizeSourceMode(mode);
 }
 
 /**
@@ -197,7 +215,10 @@ export function toDomainPerson(row: PersonWithChildren): Person {
         (nv.middle ?? undefined) === (row.canonicalMiddle ?? undefined),
     ) ?? nameVariants[0];
 
-  const fallbackProvenance: Provenance[] =
+  // Never invent provenance with personId as reportId (wrong entity). Prefer variant
+  // provenance, then first source report; if neither exists, omit canonicalName even
+  // when canonicalFull is set (incomplete row — should not occur after createFromDraft).
+  const provenanceForCanonical: Provenance[] | undefined =
     matchingVariant?.provenance ??
     (row.sourceReports[0]
       ? [
@@ -207,24 +228,18 @@ export function toDomainPerson(row: PersonWithChildren): Person {
             extractedAt: row.createdAt.toISOString(),
           },
         ]
-      : [
-          {
-            // Last resort for legacy/incomplete rows (should not occur after createFromDraft)
-            reportId: row.id,
-            sourceName: "system",
-            extractedAt: row.createdAt.toISOString(),
-          },
-        ]);
+      : undefined);
 
-  const canonicalName: NameVariant | undefined = row.canonicalFull
-    ? {
-        full: row.canonicalFull,
-        last: row.canonicalLast ?? undefined,
-        first: row.canonicalFirst ?? undefined,
-        middle: row.canonicalMiddle ?? undefined,
-        provenance: fallbackProvenance,
-      }
-    : matchingVariant;
+  const canonicalName: NameVariant | undefined =
+    row.canonicalFull && provenanceForCanonical
+      ? {
+          full: row.canonicalFull,
+          last: row.canonicalLast ?? undefined,
+          first: row.canonicalFirst ?? undefined,
+          middle: row.canonicalMiddle ?? undefined,
+          provenance: provenanceForCanonical,
+        }
+      : matchingVariant;
 
   const variantsForDomain =
     nameVariants.length > 0
@@ -276,11 +291,12 @@ export function toDomainPerson(row: PersonWithChildren): Person {
   };
 }
 
+/** Include non-deleted child facts for 360 / createFromDraft return mapping. */
 export const personInclude = {
-  contactPoints: true,
-  documents: true,
-  addresses: true,
-  relationships: true,
+  contactPoints: { where: { deletedAt: null } },
+  documents: { where: { deletedAt: null } },
+  addresses: { where: { deletedAt: null } },
+  relationships: { where: { deletedAt: null } },
   nameVariants: true,
   sourceReports: true,
 } as const;

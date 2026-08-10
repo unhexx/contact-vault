@@ -1,6 +1,7 @@
 import {
   normalizeDocumentNumber,
   normalizeEmail,
+  PersonDraftSchema,
   type ExactMatchKey,
   type Person,
   type PersonDraft,
@@ -15,6 +16,7 @@ import type {
 } from "@prisma/client";
 import { CursorError, decodeListCursor, encodeListCursor } from "../cursor.js";
 import {
+  normalizeSourceMode,
   personInclude,
   toDomainPerson,
   type PersonWithChildren,
@@ -30,6 +32,19 @@ import type {
   PersonRepository,
   PersonSummary,
 } from "../types.js";
+
+/**
+ * Search fragments for IdentityDocument.numberNorm (Russian-first).
+ * Digits-only matches passport_ru/snils/inn/oms; alnum strip matches foreign/license.
+ */
+function documentSearchFragments(q: string): string[] {
+  const out = new Set<string>();
+  const digits = q.replace(/\D/g, "");
+  if (digits.length > 0) out.add(digits);
+  const alnum = q.toUpperCase().replace(/[\s\-_.]/g, "");
+  if (alnum.length > 0) out.add(alnum);
+  return Array.from(out);
+}
 
 function db(client: DbClient): DbClient {
   return client;
@@ -193,29 +208,34 @@ export function createPersonRepository(
     ctx: CreateFromDraftContext,
     tx?: DbClient,
   ): Promise<Person> {
+    // Runtime contract: provenance + phone e164/raw (KD1, KD15)
+    const parsed = PersonDraftSchema.parse(draft);
     const c = db(tx ?? root);
+    // Persist domain mode (sectioned_text → text_export, etc.)
+    const mode =
+      normalizeSourceMode(ctx.mode) ?? ctx.mode;
 
     const created = await c.person.create({
       data: {
-        canonicalFull: draft.canonicalName?.full ?? null,
-        canonicalLast: draft.canonicalName?.last ?? null,
-        canonicalFirst: draft.canonicalName?.first ?? null,
-        canonicalMiddle: draft.canonicalName?.middle ?? null,
-        dateOfBirth: draft.dateOfBirth ?? null,
-        placeOfBirth: draft.placeOfBirth ?? null,
-        gender: draft.gender ?? null,
-        extras: draft.extras != null ? toJson(draft.extras) : undefined,
-        contactPoints: { create: contactPointCreates(draft) },
-        documents: { create: documentCreates(draft) },
-        addresses: { create: addressCreates(draft) },
-        relationships: { create: relationshipCreates(draft) },
-        nameVariants: { create: nameVariantCreates(draft) },
+        canonicalFull: parsed.canonicalName?.full ?? null,
+        canonicalLast: parsed.canonicalName?.last ?? null,
+        canonicalFirst: parsed.canonicalName?.first ?? null,
+        canonicalMiddle: parsed.canonicalName?.middle ?? null,
+        dateOfBirth: parsed.dateOfBirth ?? null,
+        placeOfBirth: parsed.placeOfBirth ?? null,
+        gender: parsed.gender ?? null,
+        extras: parsed.extras != null ? toJson(parsed.extras) : undefined,
+        contactPoints: { create: contactPointCreates(parsed) },
+        documents: { create: documentCreates(parsed) },
+        addresses: { create: addressCreates(parsed) },
+        relationships: { create: relationshipCreates(parsed) },
+        nameVariants: { create: nameVariantCreates(parsed) },
         sourceReports: {
           create: {
             reportImportId: ctx.reportImportId,
             query: ctx.query,
             contentHash: ctx.contentHash,
-            mode: ctx.mode,
+            mode,
           },
         },
       },
@@ -301,6 +321,7 @@ export function createPersonRepository(
       };
     }
 
+    const docFrags = q ? documentSearchFragments(q) : [];
     const searchFilter: Prisma.PersonWhereInput | undefined = q
       ? {
           OR: [
@@ -316,22 +337,31 @@ export function createPersonRepository(
                 },
               },
             },
-            {
-              documents: {
-                some: {
-                  deletedAt: null,
-                  numberNorm: { contains: q.replace(/\s/g, "") },
-                },
-              },
-            },
+            ...(docFrags.length > 0
+              ? [
+                  {
+                    documents: {
+                      some: {
+                        deletedAt: null,
+                        OR: docFrags.map((frag) => ({
+                          numberNorm: { contains: frag },
+                        })),
+                      },
+                    },
+                  } satisfies Prisma.PersonWhereInput,
+                ]
+              : []),
           ],
         }
       : undefined;
 
+    // Compose cursor + search with AND so neither OR clobber the other (Issue 1)
     const where: Prisma.PersonWhereInput = {
       deletedAt: null,
-      ...(cursorFilter ? cursorFilter : {}),
-      ...(searchFilter ? searchFilter : {}),
+      AND: [
+        ...(cursorFilter ? [cursorFilter] : []),
+        ...(searchFilter ? [searchFilter] : []),
+      ],
     };
 
     const rows = await root.person.findMany({
@@ -414,17 +444,24 @@ export function createPersonRepository(
     const c = db(tx ?? root);
     const exclude = new Set(opts?.excludePersonIds ?? []);
 
+    // Defense in depth: re-normalize like domain scoreExactMatches (Issue 5)
     const phones = keys
       .filter((k): k is Extract<ExactMatchKey, { kind: "phone" }> => k.kind === "phone")
-      .map((k) => k.e164)
+      .map((k) => k.e164.trim())
       .filter(Boolean);
     const emails = keys
       .filter((k): k is Extract<ExactMatchKey, { kind: "email" }> => k.kind === "email")
-      .map((k) => k.value)
+      .map((k) => normalizeEmail(k.value))
       .filter(Boolean);
-    const docs = keys.filter(
-      (k): k is Extract<ExactMatchKey, { kind: "document" }> => k.kind === "document",
-    );
+    const docs = keys
+      .filter(
+        (k): k is Extract<ExactMatchKey, { kind: "document" }> => k.kind === "document",
+      )
+      .map((d) => ({
+        type: d.type,
+        number: normalizeDocumentNumber(d.type, d.number),
+      }))
+      .filter((d) => d.number.length > 0);
 
     // personId -> matched fields (deduped)
     const byPerson = new Map<string, Map<string, MatchedOnField>>();

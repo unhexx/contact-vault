@@ -17,7 +17,10 @@ export {
   encodeListCursor,
 } from "./cursor.js";
 
+export { DbError, isDbError, type DbErrorCode } from "./errors.js";
+
 export {
+  normalizeSourceMode,
   personInclude,
   toDomainPerson,
   type PersonWithChildren,

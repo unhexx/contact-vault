@@ -28,10 +28,18 @@ export type ListPersonsResult = {
   nextCursor?: string;
 };
 
+/**
+ * Context for persisting a draft under a ReportImport.
+ *
+ * `mode` is stored on PersonSourceReport and mapped to domain Person.sourceReports[].mode.
+ * Prefer domain mode strings: void_html | text_export | inline_dossier | telegram | fio | facesearch | other.
+ * Aliases accepted on write: sectioned_text → text_export; void-html → void_html.
+ */
 export type CreateFromDraftContext = {
   reportImportId: string;
   contentHash: string;
   query: string;
+  /** Domain source mode (see above); format aliases normalized in createFromDraft. */
   mode: string;
 };
 
@@ -92,13 +100,14 @@ export type CreateReportImportInput = {
   rawStorage?: string | null;
 };
 
-export type MatchedOnJson = Array<{ field: string; value: string }>;
+/** JSON payload for MergeSuggestion.matchedOn — same shape as MatchedOnField. */
+export type MatchedOnJson = MatchedOnField[];
 
 export type CreateMergeSuggestionInput = {
   reportImportId: string;
   newPersonId: string;
   targetPersonId: string;
-  matchedOn: MatchedOnJson;
+  matchedOn: MatchedOnField[];
 };
 
 export type CreateAuditLogInput = {

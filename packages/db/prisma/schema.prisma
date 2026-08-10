@@ -242,6 +242,9 @@ model MergeSuggestion {
   @@index([targetPersonId, status])
   @@index([newPersonId, status])
   @@index([reportImportId])
+  // Prevent duplicate suggestions for same import pair (PR5 race defense)
+  @@unique([reportImportId, newPersonId, targetPersonId])
+  // CHECK (newPersonId <> targetPersonId) applied in migration 0002 (Prisma has no CHECK DSL)
 }
 
 model AuditLog {

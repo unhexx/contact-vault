@@ -10,11 +10,14 @@ import {
   normalizeEmail,
 } from "@contact-vault/domain";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { CursorError } from "../src/cursor.js";
+import { DbError } from "../src/errors.js";
 import {
   contentHashSynthetic,
   createTestCtx,
   draftPerson,
   ensureReportImport,
+  prov,
   randomUUID,
   SYNTH,
   truncateAll,
@@ -119,7 +122,7 @@ describe.skipIf(!hasDb)("db integration", () => {
       { field: "phone", value: SYNTH.phoneA },
     ]);
 
-    // 2) create B
+    // 2) create B (sectioned_text alias → text_export on Sources)
     const personB = await ctx.persons.createFromDraft(draftB, {
       reportImportId: reportB.id,
       contentHash: reportB.contentHash,
@@ -127,6 +130,7 @@ describe.skipIf(!hasDb)("db integration", () => {
       mode: "sectioned_text",
     });
     expect(personB.id).not.toBe(personA.id);
+    expect(personB.sourceReports[0]?.mode).toBe("text_export");
 
     // 3) insert suggestions: new=B, target=A only; never self
     for (const c of candidates) {
@@ -147,7 +151,7 @@ describe.skipIf(!hasDb)("db integration", () => {
     expect(open[0]?.targetPersonId).toBe(personA.id);
     expect(open[0]?.newPersonId).not.toBe(open[0]?.targetPersonId);
 
-    // create rejects self-suggestion
+    // create rejects self-suggestion with stable DbError code
     await expect(
       ctx.merges.create({
         reportImportId: reportB.id,
@@ -155,7 +159,7 @@ describe.skipIf(!hasDb)("db integration", () => {
         targetPersonId: personB.id,
         matchedOn: [{ field: "phone", value: SYNTH.phoneA }],
       }),
-    ).rejects.toThrow(/self-suggestion/i);
+    ).rejects.toMatchObject({ code: "SELF_SUGGESTION" } satisfies Partial<DbError>);
   });
 
   it("findByExactKeys with excludePersonIds omits self after create", async () => {
@@ -376,6 +380,214 @@ describe.skipIf(!hasDb)("db integration", () => {
 
     const byName = await ctx.persons.list({ q: "Тестов", limit: 10 });
     expect(byName.items).toHaveLength(1);
+  });
+
+  it("list with q + cursor returns disjoint multi-page coverage", async () => {
+    // Shared prefix so all match the same search query
+    for (let i = 0; i < 3; i++) {
+      const report = await ensureReportImport(ctx);
+      await ctx.persons.createFromDraft(
+        draftPerson({
+          reportId: report.id,
+          name: `КурсорПоиск ${i}`,
+          phone: `+7999111${2000 + i}`,
+        }),
+        {
+          reportImportId: report.id,
+          contentHash: report.contentHash,
+          query: `cursor-q-${i}`,
+          mode: "void_html",
+        },
+      );
+    }
+    // Noise person that must not appear under q
+    const noise = await ensureReportImport(ctx);
+    await ctx.persons.createFromDraft(
+      draftPerson({
+        reportId: noise.id,
+        name: "Другой Человек",
+        phone: "+79992223344",
+      }),
+      {
+        reportImportId: noise.id,
+        contentHash: noise.contentHash,
+        query: "noise",
+        mode: "void_html",
+      },
+    );
+
+    const page1 = await ctx.persons.list({ q: "КурсорПоиск", limit: 2 });
+    expect(page1.items).toHaveLength(2);
+    expect(page1.nextCursor).toBeTruthy();
+    expect(page1.items.every((i) => i.displayName.includes("КурсорПоиск"))).toBe(
+      true,
+    );
+
+    const page2 = await ctx.persons.list({
+      q: "КурсорПоиск",
+      limit: 2,
+      cursor: page1.nextCursor,
+    });
+    expect(page2.items).toHaveLength(1);
+    const allIds = [...page1.items, ...page2.items].map((i) => i.id);
+    expect(new Set(allIds).size).toBe(3);
+    // No overlap between pages
+    expect(
+      page1.items.some((a) => page2.items.some((b) => b.id === a.id)),
+    ).toBe(false);
+  });
+
+  it("list document search finds SNILS with dashes/spaces (Russian-first)", async () => {
+    const report = await ensureReportImport(ctx);
+    await ctx.persons.createFromDraft(
+      draftPerson({
+        reportId: report.id,
+        name: SYNTH.nameA,
+        snils: SYNTH.snilsA, // 112-233-445 95
+      }),
+      {
+        reportImportId: report.id,
+        contentHash: report.contentHash,
+        query: "snils-search",
+        mode: "void_html",
+      },
+    );
+
+    const byDashed = await ctx.persons.list({ q: "112-233-445", limit: 10 });
+    expect(byDashed.items).toHaveLength(1);
+
+    const bySpaced = await ctx.persons.list({
+      q: "112 233 445 95",
+      limit: 10,
+    });
+    expect(bySpaced.items).toHaveLength(1);
+  });
+
+  it("invalid list cursor throws CursorError (BAD_REQUEST)", async () => {
+    await expect(ctx.persons.list({ limit: 10, cursor: "not-valid!!!" })).rejects.toBeInstanceOf(
+      CursorError,
+    );
+    await expect(
+      ctx.persons.list({
+        limit: 10,
+        cursor: Buffer.from("{}", "utf8").toString("base64url"),
+      }),
+    ).rejects.toBeInstanceOf(CursorError);
+  });
+
+  it("softDelete is idempotent on second call", async () => {
+    const report = await ensureReportImport(ctx);
+    const person = await ctx.persons.createFromDraft(
+      draftPerson({ reportId: report.id, phone: SYNTH.phoneA }),
+      {
+        reportImportId: report.id,
+        contentHash: report.contentHash,
+        query: "idem",
+        mode: "void_html",
+      },
+    );
+    await ctx.persons.softDelete(person.id);
+    await expect(ctx.persons.softDelete(person.id)).resolves.toBeUndefined();
+    expect(await ctx.persons.get360(person.id)).toBeNull();
+  });
+
+  it("phone without e164 is not an exact-match key and not found by e164 query", async () => {
+    const report = await ensureReportImport(ctx);
+    const p = prov(report.id);
+    const draft = {
+      ...draftPerson({ reportId: report.id, name: SYNTH.nameA }),
+      contactPoints: [
+        {
+          kind: "phone" as const,
+          raw: "не номер",
+          provenance: p,
+        },
+      ],
+    };
+    expect(extractExactMatchKeys(draft)).toEqual([]);
+
+    const person = await ctx.persons.createFromDraft(draft, {
+      reportImportId: report.id,
+      contentHash: report.contentHash,
+      query: "raw-only",
+      mode: "void_html",
+    });
+
+    const hits = await ctx.persons.findByExactKeys([
+      { kind: "phone", e164: SYNTH.phoneA },
+    ]);
+    expect(hits.map((h) => h.personId)).not.toContain(person.id);
+  });
+
+  it("accept returns null when either party is soft-deleted", async () => {
+    const reportA = await ensureReportImport(ctx);
+    const personA = await ctx.persons.createFromDraft(
+      draftPerson({ reportId: reportA.id, phone: SYNTH.phoneA }),
+      {
+        reportImportId: reportA.id,
+        contentHash: reportA.contentHash,
+        query: "a",
+        mode: "void_html",
+      },
+    );
+    const reportB = await ensureReportImport(ctx);
+    const personB = await ctx.persons.createFromDraft(
+      draftPerson({ reportId: reportB.id, phone: SYNTH.phoneB }),
+      {
+        reportImportId: reportB.id,
+        contentHash: reportB.contentHash,
+        query: "b",
+        mode: "void_html",
+      },
+    );
+    const suggestion = await ctx.merges.create({
+      reportImportId: reportB.id,
+      newPersonId: personB.id,
+      targetPersonId: personA.id,
+      matchedOn: [{ field: "phone", value: SYNTH.phoneA }],
+    });
+
+    // Simulate race: party soft-deleted without dismiss path
+    await ctx.prisma.person.update({
+      where: { id: personA.id },
+      data: { deletedAt: new Date() },
+    });
+
+    expect(await ctx.merges.accept(suggestion.id)).toBeNull();
+    const row = await ctx.merges.findById(suggestion.id);
+    expect(row?.status).toBe("open"); // unchanged
+  });
+
+  it("findByExactKeys re-normalizes display email and raw document numbers", async () => {
+    const report = await ensureReportImport(ctx);
+    const person = await ctx.persons.createFromDraft(
+      draftPerson({
+        reportId: report.id,
+        email: SYNTH.emailA,
+        passport: SYNTH.passportA,
+      }),
+      {
+        reportImportId: report.id,
+        contentHash: report.contentHash,
+        query: "renorm",
+        mode: "void_html",
+      },
+    );
+
+    const hits = await ctx.persons.findByExactKeys([
+      { kind: "email", value: "  Alice.Test@Example.COM " },
+      {
+        kind: "document",
+        type: "passport_ru",
+        number: "4509 123456", // raw, not numberNorm
+      },
+    ]);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.personId).toBe(person.id);
+    expect(hits[0]?.matchedOn.map((m) => m.field).sort()).toEqual([
+      "document",
+      "email",
+    ]);
   });
 });
 
