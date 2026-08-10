@@ -30,37 +30,56 @@ function tooltipBody(p: Provenance): string {
   return lines.join("\n");
 }
 
+/** Group key for compact badges; still list every provenance line in the tooltip. */
+function sourceGroupKey(p: Provenance): string {
+  return p.sourceName || "source";
+}
+
+function groupTooltip(entries: Provenance[]): string {
+  if (entries.length === 1) {
+    const first = entries[0];
+    return first ? tooltipBody(first) : "";
+  }
+  return entries
+    .map((p, i) => {
+      const body = tooltipBody(p);
+      return `—— ${i + 1}/${entries.length} ——\n${body}`;
+    })
+    .join("\n\n");
+}
+
 export function SourceBadge({ provenance, className }: SourceBadgeProps) {
   const list = Array.isArray(provenance) ? provenance : [provenance];
   if (list.length === 0) return null;
 
-  // Deduplicate by sourceName for compact display
-  const seen = new Set<string>();
-  const unique = list.filter((p) => {
-    const key = p.sourceName;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  // Compact one badge per sourceName; tooltip lists every provenance entry
+  // so originalKey/originalValue/section are never dropped (review Issue 3).
+  const groups = new Map<string, Provenance[]>();
+  for (const p of list) {
+    const key = sourceGroupKey(p);
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(p);
+    else groups.set(key, [p]);
+  }
 
   return (
-    <span className={`inline-flex flex-wrap items-center gap-1 ${className ?? ""}`}>
-      {unique.map((p, i) => (
-        <Tooltip key={`${p.sourceName}-${i}`}>
+    <span
+      className={`inline-flex flex-wrap items-center gap-1 ${className ?? ""}`}
+    >
+      {Array.from(groups.entries()).map(([name, entries]) => (
+        <Tooltip key={name}>
           <TooltipTrigger asChild>
             <Badge
               variant="secondary"
               className="cursor-help font-normal"
               tabIndex={0}
             >
-              {badgeLabel(p)}
-              {list.filter((x) => x.sourceName === p.sourceName).length > 1
-                ? ` ×${list.filter((x) => x.sourceName === p.sourceName).length}`
-                : ""}
+              {badgeLabel(entries[0]!)}
+              {entries.length > 1 ? ` ×${entries.length}` : ""}
             </Badge>
           </TooltipTrigger>
-          <TooltipContent side="top" className="whitespace-pre-wrap">
-            {tooltipBody(p)}
+          <TooltipContent side="top" className="max-w-sm whitespace-pre-wrap">
+            {groupTooltip(entries)}
           </TooltipContent>
         </Tooltip>
       ))}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { GitMerge, Search, Trash2 } from "lucide-react";
 
 import { CopyField } from "@/components/copy-field";
@@ -26,15 +26,21 @@ export function ContactList() {
   const [debouncedQ, setDebouncedQ] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const utils = trpc.useUtils();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Simple debounce via timeout in onChange handler state machine
-  const [timer, setTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   function onSearchChange(value: string) {
     setQ(value);
-    if (timer) clearTimeout(timer);
-    const t = setTimeout(() => setDebouncedQ(value.trim()), 250);
-    setTimer(t);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setDebouncedQ(value.trim());
+      timerRef.current = null;
+    }, 250);
   }
 
   const listQuery = trpc.contacts.list.useQuery(
@@ -46,7 +52,11 @@ export function ContactList() {
     onSuccess: async () => {
       toast({ title: "Contact deleted", description: "Soft-deleted successfully" });
       setDeleteId(null);
-      await utils.contacts.list.invalidate();
+      await Promise.all([
+        utils.contacts.list.invalidate(),
+        utils.merge.listSuggestions.invalidate(),
+        utils.contacts.get360.invalidate(),
+      ]);
     },
     onError: (err) => {
       toast({

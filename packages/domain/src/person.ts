@@ -67,6 +67,18 @@ export const PersonSchema = z
             "other",
           ])
           .optional(),
+        /** Parse warnings from ReportImport (enriched on get360). */
+        warnings: z
+          .array(
+            z.object({
+              code: z.string(),
+              message: z.string(),
+              section: z.string().optional(),
+              key: z.string().optional(),
+              severity: z.enum(["info", "warn", "error"]),
+            }),
+          )
+          .optional(),
       }),
     ),
     createdAt: z.string(),

@@ -59,7 +59,11 @@ export function Contact360({ personId }: { personId: string }) {
   const softDelete = trpc.contacts.softDelete.useMutation({
     onSuccess: async () => {
       toast({ title: "Contact deleted" });
-      await utils.contacts.list.invalidate();
+      await Promise.all([
+        utils.contacts.list.invalidate(),
+        utils.merge.listSuggestions.invalidate(),
+        utils.contacts.get360.invalidate(),
+      ]);
       router.push("/contacts");
     },
     onError: (err) => {
@@ -413,6 +417,7 @@ function DocumentsTab({ person }: { person: Person }) {
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-sm">
+          <caption className="sr-only">Identity documents</caption>
           <thead>
             <tr className="border-b text-xs uppercase text-muted-foreground">
               <th className="pb-2 pr-3 font-medium">Type</th>
@@ -603,35 +608,78 @@ function SourcesTab({ person }: { person: Person }) {
       <CardHeader>
         <CardTitle className="text-base">Sources</CardTitle>
         <CardDescription>
-          Report imports that contributed facts to this person
+          Report imports, content hashes, and parse warnings
         </CardDescription>
       </CardHeader>
       <CardContent>
         <ul className="space-y-3">
-          {person.sourceReports.map((s, i) => (
-            <li key={`${s.reportId}-${i}`} className="rounded-lg border p-3 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                {s.mode ? <Badge variant="secondary">{s.mode}</Badge> : null}
-                <span className="text-muted-foreground">
-                  Imported {formatDisplayDate(s.importedAt)}
-                </span>
-              </div>
-              <div className="mt-2 space-y-1 font-mono text-xs">
-                <div>
-                  reportId:{" "}
-                  <CopyField value={s.reportId} label="Report ID" mono />
+          {person.sourceReports.map((s, i) => {
+            const warnings = s.warnings ?? [];
+            return (
+              <li
+                key={`${s.reportId}-${i}`}
+                className="rounded-lg border p-3 text-sm"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  {s.mode ? <Badge variant="secondary">{s.mode}</Badge> : null}
+                  <span className="text-muted-foreground">
+                    Imported {formatDisplayDate(s.importedAt)}
+                  </span>
+                  {warnings.length > 0 ? (
+                    <Badge variant="warning">
+                      {warnings.length} warning
+                      {warnings.length === 1 ? "" : "s"}
+                    </Badge>
+                  ) : null}
                 </div>
-                <div>
-                  contentHash:{" "}
-                  <CopyField value={s.contentHash} label="Content hash" mono />
+                <div className="mt-2 space-y-1 font-mono text-xs">
+                  <div>
+                    reportId:{" "}
+                    <CopyField value={s.reportId} label="Report ID" mono />
+                  </div>
+                  <div>
+                    contentHash:{" "}
+                    <CopyField
+                      value={s.contentHash}
+                      label="Content hash"
+                      mono
+                    />
+                  </div>
+                  <div>
+                    query: <CopyField value={s.query} label="Report query" />
+                  </div>
                 </div>
-                <div>
-                  query:{" "}
-                  <CopyField value={s.query} label="Report query" />
-                </div>
-              </div>
-            </li>
-          ))}
+                {warnings.length > 0 ? (
+                  <ul className="mt-3 max-h-40 space-y-1.5 overflow-y-auto rounded-md border bg-muted/20 p-2 text-xs">
+                    {warnings.map((w, wi) => (
+                      <li key={`${w.code}-${wi}`}>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge
+                            variant={
+                              w.severity === "error"
+                                ? "destructive"
+                                : w.severity === "warn"
+                                  ? "warning"
+                                  : "secondary"
+                            }
+                            className="text-[10px]"
+                          >
+                            {w.code}
+                          </Badge>
+                          <span>{w.message}</span>
+                        </div>
+                        {(w.section || w.key) && (
+                          <p className="mt-0.5 text-muted-foreground">
+                            {[w.section, w.key].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </CardContent>
     </Card>

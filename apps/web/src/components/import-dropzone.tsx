@@ -10,6 +10,7 @@ import {
   Info,
   Loader2,
 } from "lucide-react";
+import type { inferRouterOutputs } from "@trpc/server";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,29 +22,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
+import { MAX_IMPORT_CHARS } from "@/lib/import-limits";
 import { cn, shortId } from "@/lib/utils";
+import type { AppRouter } from "@/server/trpc/router";
 import { trpc } from "@/trpc/react";
 
-type ImportSuccess = {
-  reportImportId: string;
-  format: string;
-  contentHash: string;
-  duplicate: boolean;
-  warnings: Array<{
-    code: string;
-    message: string;
-    section?: string;
-    key?: string;
-    severity: "info" | "warn" | "error";
-  }>;
-  personIds: string[];
-  mergeSuggestions: Array<{
-    id: string;
-    newPersonId: string;
-    targetPersonId: string;
-    matchedOn: Array<{ field: string; value: string }>;
-  }>;
-};
+type ImportSuccess = inferRouterOutputs<AppRouter>["reports"]["import"];
 
 const ACCEPT = ".html,.htm,.txt,text/html,text/plain";
 
@@ -55,7 +39,7 @@ export function ImportDropzone() {
 
   const importMutation = trpc.reports.import.useMutation({
     onSuccess: async (data) => {
-      setResult(data as ImportSuccess);
+      setResult(data);
       await utils.contacts.list.invalidate();
       await utils.merge.listSuggestions.invalidate();
       toast({
@@ -85,7 +69,25 @@ export function ImportDropzone() {
         });
         return;
       }
+      // Cheap size preflight (UTF-16 units ≈ JS string length after read;
+      // reject oversized blobs before reading when File.size is decisive).
+      if (file.size > MAX_IMPORT_CHARS * 4) {
+        toast({
+          variant: "destructive",
+          title: "File too large",
+          description: `Import exceeds max size (${MAX_IMPORT_CHARS.toLocaleString()} characters)`,
+        });
+        return;
+      }
       const content = await file.text();
+      if (content.length > MAX_IMPORT_CHARS) {
+        toast({
+          variant: "destructive",
+          title: "File too large",
+          description: `Import exceeds MAX_IMPORT_CHARS (${MAX_IMPORT_CHARS.toLocaleString()})`,
+        });
+        return;
+      }
       setResult(null);
       importMutation.mutate({ filename: name, content });
     },
