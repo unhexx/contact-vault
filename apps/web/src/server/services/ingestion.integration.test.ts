@@ -1,6 +1,9 @@
 /**
  * Integration tests for import + merge (Postgres).
- * Skips when DATABASE_URL is unset or DB unreachable.
+ *
+ * Skip policy (Issue 5):
+ * - SKIP_DB_TESTS=1 → describe.skip (explicit opt-out)
+ * - DB unreachable with default/set DATABASE_URL → beforeAll throws (no false green)
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -21,6 +24,8 @@ const DATABASE_URL =
   process.env.DATABASE_URL ??
   "postgresql://contactvault:contactvault@localhost:5432/contactvault";
 
+const skipDb = process.env.SKIP_DB_TESTS === "1";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../../../../");
 const fixtureTxt = path.join(
@@ -36,18 +41,21 @@ function load(p: string): string {
   return readFileSync(p, "utf8");
 }
 
-describe("ingestion + merge integration", () => {
+describe.skipIf(skipDb)("ingestion + merge integration", () => {
   let prisma: PrismaClient;
-  let available = false;
 
   beforeAll(async () => {
     process.env.DATABASE_URL = DATABASE_URL;
     prisma = createPrismaClient(DATABASE_URL);
     try {
       await prisma.$queryRaw`SELECT 1`;
-      available = true;
-    } catch {
-      available = false;
+    } catch (err) {
+      await prisma.$disconnect().catch(() => undefined);
+      throw new Error(
+        `Postgres unreachable at ${DATABASE_URL}. ` +
+          `Start Postgres or set SKIP_DB_TESTS=1 to opt out. ` +
+          `(${err instanceof Error ? err.message : String(err)})`,
+      );
     }
   });
 
@@ -56,11 +64,6 @@ describe("ingestion + merge integration", () => {
   });
 
   it("imports sectioned-text, is idempotent, creates merge on shared phone", async () => {
-    if (!available) {
-      console.warn("SKIP: Postgres not available");
-      return;
-    }
-
     // Unique content per run to avoid cross-run pollution while testing happy path
     const suffix = `\n# test-run ${Date.now()}\n`;
     const contentA = load(fixtureTxt) + suffix;
@@ -107,6 +110,13 @@ describe("ingestion + merge integration", () => {
     }
 
     const sug = targetsFirst[0]!;
+    // Capture source import id for KD22 assertion (before merge moves PSR)
+    const sourcePsrBefore = await prisma.personSourceReport.findMany({
+      where: { personId: sug.newPersonId },
+    });
+    expect(sourcePsrBefore.length).toBeGreaterThanOrEqual(1);
+    const sourceReportImportIds = sourcePsrBefore.map((p) => p.reportImportId);
+
     const preview = await previewMerge(prisma, sug.id);
     expect(preview.sourcePersonId).toBe(sug.newPersonId);
     expect(preview.targetPersonId).toBe(sug.targetPersonId);
@@ -133,11 +143,20 @@ describe("ingestion + merge integration", () => {
     });
     expect(source?.deletedAt).not.toBeNull();
 
-    // Target has source-report links from both (or at least ≥1; move may skip dup hash)
-    const psrs = await prisma.personSourceReport.findMany({
+    // KD22: source has zero PSR rows; target owns source's reportImportId links
+    const sourcePsrsAfter = await prisma.personSourceReport.findMany({
+      where: { personId: sug.newPersonId },
+    });
+    expect(sourcePsrsAfter).toHaveLength(0);
+
+    const targetPsrs = await prisma.personSourceReport.findMany({
       where: { personId: sug.targetPersonId },
     });
-    expect(psrs.length).toBeGreaterThanOrEqual(1);
+    const targetImportIds = new Set(targetPsrs.map((p) => p.reportImportId));
+    for (const rid of sourceReportImportIds) {
+      expect(targetImportIds.has(rid)).toBe(true);
+    }
+    expect(targetPsrs.length).toBeGreaterThanOrEqual(2);
 
     // Suggestion accepted
     const sugRow = await prisma.mergeSuggestion.findUnique({
@@ -145,7 +164,7 @@ describe("ingestion + merge integration", () => {
     });
     expect(sugRow?.status).toBe("accepted");
 
-    // Audit merge
+    // Audit merge — prove PersonSourceReport move recorded
     const audits = await prisma.auditLog.findMany({
       where: { action: "merge", entityId: sug.targetPersonId },
       orderBy: { createdAt: "desc" },
@@ -154,19 +173,19 @@ describe("ingestion + merge integration", () => {
     expect(audits.length).toBe(1);
     const payload = audits[0]!.payload as {
       movedEntityIds?: { personSourceReports?: string[] };
+      skippedPersonSourceReportIds?: string[];
       sourcePersonId?: string;
     };
     expect(payload.sourcePersonId).toBe(sug.newPersonId);
+    const moved = payload.movedEntityIds?.personSourceReports?.length ?? 0;
+    const skipped = payload.skippedPersonSourceReportIds?.length ?? 0;
+    expect(moved + skipped).toBeGreaterThanOrEqual(1);
+    expect(moved).toBeGreaterThanOrEqual(1);
   }, 60_000);
 
   it("dismiss keeps both persons", async () => {
-    if (!available) {
-      console.warn("SKIP: Postgres not available");
-      return;
-    }
-
     const stamp = Date.now();
-    // Two imports with shared synthetic phone via void-html style sectioned content
+    // Two imports with shared synthetic phone via sectioned content
     const base = `
 === Общая сводка ===
 Телефон: +7 900 111-22-33
@@ -198,6 +217,7 @@ Email: dismiss.other.${stamp}@example.com
       { prisma, storeRawReports: false },
       { filename: "dismiss-b.txt", content: variant },
     );
+    expect(a.personIds.length).toBeGreaterThanOrEqual(1);
     expect(b.mergeSuggestions.length).toBeGreaterThanOrEqual(1);
     const sug = b.mergeSuggestions[0]!;
 
@@ -218,12 +238,9 @@ Email: dismiss.other.${stamp}@example.com
     });
     expect(pNew).not.toBeNull();
     expect(pTarget).not.toBeNull();
-    // silence unused if first import empty persons somehow
-    expect(a.personIds.length).toBeGreaterThanOrEqual(0);
   }, 60_000);
 
   it("rejects unknown format without writing completed import", async () => {
-    if (!available) return;
     const content = `not a real report ${Date.now()}`;
     await expect(
       importReport(
@@ -234,7 +251,6 @@ Email: dismiss.other.${stamp}@example.com
   });
 
   it("imports void-html fixture", async () => {
-    if (!available) return;
     const content = load(fixtureHtml) + `\n<!-- ${Date.now()} -->\n`;
     const r = await importReport(
       { prisma, storeRawReports: false },

@@ -16,6 +16,8 @@ coverage
 *.log
 samples/private/
 uploads/
+# Optional raw report bodies when STORE_RAW_REPORTS=true (KD14) — never commit PII
+data/
 prisma/*.db
 prisma/*.db-journal
 *.tsbuildinfo

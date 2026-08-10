@@ -1,9 +1,10 @@
 /**
- * tRPC init + error mapping for AppError / CursorError / DbError.
+ * tRPC init + error mapping for AppError / CursorError / DbError / ZodError.
  */
 import { CursorError, isDbError } from "@contact-vault/db";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
+import { ZodError } from "zod";
 
 import { isAppError } from "../errors.js";
 import type { TrpcContext } from "./context.js";
@@ -31,6 +32,10 @@ const t = initTRPC.context<TrpcContext>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
+function isZodError(err: unknown): err is ZodError {
+  return err instanceof ZodError || (err as { name?: string })?.name === "ZodError";
+}
+
 /** Map known domain/app errors into TRPCError. */
 export function toTrpcError(err: unknown): never {
   if (err instanceof TRPCError) throw err;
@@ -51,6 +56,19 @@ export function toTrpcError(err: unknown): never {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: err.message,
+      cause: err,
+    });
+  }
+
+  // Defense-in-depth: createFromDraft PersonDraftSchema.parse → BAD_REQUEST (Issue 6)
+  if (isZodError(err)) {
+    const message =
+      err instanceof ZodError
+        ? err.errors.map((e) => e.message).join("; ") || "Validation failed"
+        : "Validation failed";
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message,
       cause: err,
     });
   }

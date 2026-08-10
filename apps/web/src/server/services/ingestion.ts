@@ -5,7 +5,7 @@
  * No silent merge. No raw blob by default.
  */
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -53,10 +53,38 @@ export type IngestionDeps = {
   dataRoot?: string;
 };
 
-function isUniqueViolation(err: unknown): boolean {
-  return (
-    err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002"
-  );
+/**
+ * True only when P2002 is on ReportImport.contentHash (import race).
+ * Other unique targets (IdentityDocument, MergeSuggestion, PSR) must not
+ * be masked as contentHash race (Issue 1).
+ *
+ * Exported for unit tests.
+ */
+export function isContentHashUniqueViolation(err: unknown): boolean {
+  if (
+    !(err instanceof Prisma.PrismaClientKnownRequestError) ||
+    err.code !== "P2002"
+  ) {
+    return false;
+  }
+  const target = err.meta?.target;
+  if (typeof target === "string") {
+    // Prisma may report "contentHash" or a constraint name containing it
+    return (
+      target === "contentHash" ||
+      target.includes("contentHash") ||
+      target.includes("content_hash")
+    );
+  }
+  if (Array.isArray(target)) {
+    return target.some(
+      (t) =>
+        t === "contentHash" ||
+        (typeof t === "string" &&
+          (t.includes("contentHash") || t.includes("content_hash"))),
+    );
+  }
+  return false;
 }
 
 function parserFormatToDb(
@@ -125,8 +153,9 @@ async function buildDuplicateResult(
   });
   const personIds = [...new Set(personLinks.map((l) => l.personId))];
 
+  // Re-import banner should only surface still-open suggestions (Issue 7)
   const suggestions = await prisma.mergeSuggestion.findMany({
-    where: { reportImportId },
+    where: { reportImportId, status: "open" },
     orderBy: { createdAt: "asc" },
   });
 
@@ -216,15 +245,11 @@ export async function importReport(
   const byteSize = Buffer.byteLength(input.content, "utf8");
   const query = parsed.reportMeta.reportQuery ?? "";
 
-  let rawStorage: string | null = null;
-  if (storeRaw) {
-    // KD14 optional path — filesystem only, not BYTEA
-    const rel = path.join("data", "reports", `${reportImportId}.bin`);
-    const abs = path.join(dataRoot, rel);
-    await mkdir(path.dirname(abs), { recursive: true });
-    await writeFile(abs, input.content, "utf8");
-    rawStorage = rel;
-  }
+  // KD14: planned relative path only inside TX; write file AFTER successful commit
+  // so failed/raced imports do not leave orphan blobs (Issue 4).
+  const rawRel = storeRaw
+    ? path.join("data", "reports", `${reportImportId}.bin`)
+    : null;
 
   try {
     const result = await prisma.$transaction(
@@ -244,7 +269,7 @@ export async function importReport(
           byteSize,
           warnings: parsed.warnings,
           status: "parsed",
-          rawStorage,
+          rawStorage: rawRel,
         });
 
         const personIds: string[] = [];
@@ -332,10 +357,48 @@ export async function importReport(
       },
     );
 
+    // Persist raw body only after successful commit (best-effort; clear path on failure)
+    if (storeRaw && rawRel) {
+      try {
+        const abs = path.join(dataRoot, rawRel);
+        await mkdir(path.dirname(abs), { recursive: true });
+        await writeFile(abs, input.content, "utf8");
+      } catch (writeErr) {
+        console.error(
+          JSON.stringify({
+            level: "error",
+            msg: "STORE_RAW_REPORTS write failed after successful import",
+            reportImportId,
+            path: rawRel,
+            error:
+              writeErr instanceof Error ? writeErr.message : String(writeErr),
+          }),
+        );
+        // Clear stale rawStorage pointer so UI does not claim a missing file
+        try {
+          await prisma.reportImport.update({
+            where: { id: reportImportId },
+            data: { rawStorage: null },
+          });
+        } catch {
+          // ignore secondary failure
+        }
+      }
+    }
+
     return result;
   } catch (err) {
-    if (isUniqueViolation(err)) {
-      // Race on contentHash unique — re-fetch
+    // Best-effort: never leave orphan files (defensive if write ever moves earlier)
+    if (storeRaw && rawRel) {
+      try {
+        await unlink(path.join(dataRoot, rawRel));
+      } catch {
+        // file may not exist — fine
+      }
+    }
+
+    // Issue 1: only contentHash unique is an import race
+    if (isContentHashUniqueViolation(err)) {
       const raced = await reportImportRepo.findByContentHash(contentHash);
       if (raced?.status === "completed") {
         return buildDuplicateResult(
@@ -352,6 +415,19 @@ export async function importReport(
         "IMPORT_IN_PROGRESS",
       );
     }
+
+    // Other P2002 (docs / suggestions / PSR) — surface as UNIQUE_VIOLATION
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      throw new AppError(
+        "CONFLICT",
+        "Unique constraint violation during import",
+        "UNIQUE_VIOLATION",
+      );
+    }
+
     throw err;
   }
 }
