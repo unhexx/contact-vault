@@ -52,6 +52,7 @@ type ContactPoint =
       raw?: string;
       isPrimary?: boolean;
       tags?: string[];
+      meta?: Record<string, unknown>; // e.g. telecomHistory[]
       provenance: Provenance[];
     }
   | {
@@ -139,10 +140,14 @@ type Vehicle = {
   year?: number;
   plate?: string;
   vin?: string;
+  powerHp?: number;
+  engineVolumeCc?: number;
+  category?: string;
   ownershipPeriods?: Array<{
     from?: string;
     to?: string;
     ownerName?: string;
+    operationCode?: string;
   }>;
   photos?: Array<{
     url: string;
@@ -161,7 +166,7 @@ type Vehicle = {
 type Relationship = {
   id: string;
   type: "family" | "possible" | "colleague" | "neighbor" | "other";
-  relationLabel?: string;        // "мать", "супруг"...
+  relationLabel?: string;        // "мать", "родитель"...
   relatedPersonId?: string;      // if already in system
   relatedPersonHint: {
     fio?: string;
@@ -170,6 +175,36 @@ type Relationship = {
   };
   sharedAddress?: string;
   strength?: number;
+  provenance: Provenance[];
+};
+```
+
+### RiskScore (scoring / inline-dossier exports)
+
+```ts
+type RiskScore = {
+  overall: number;               // 0..1 (e.g. 0.8 = "плохо")
+  label?: string;
+  categories: Array<{ name: string; flag: 0 | 1 }>;
+  articles: Array<{ code: string; category?: string; details?: string }>;
+  provenance: Provenance[];
+};
+```
+
+### Incident (incl. criminal / court)
+
+```ts
+type Incident = {
+  id: string;
+  severity: "high" | "medium" | "low";
+  title?: string;
+  body?: Record<string, string>;
+  articleCode?: string;          // e.g. "228 Ч.2"
+  caseNumber?: string;
+  sentenceDate?: string;
+  decision?: string;             // "Вынесен ПРИГОВОР"
+  region?: string;
+  tags?: string[];
   provenance: Provenance[];
 };
 ```
@@ -197,12 +232,14 @@ type Person = {
   bankRelations: BankRelation[];
   paymentCards: PaymentCard[];
   phoneReputation?: PhoneReputation;
+  riskScores?: RiskScore[];
 
   sourceReports: Array<{
     reportId: string;
     query: string;
     contentHash: string;
     importedAt: string;
+    mode?: "void_html" | "text_export" | "inline_dossier" | "telegram" | "fio" | "facesearch" | "other";
   }>;
 
   createdAt: string;
@@ -211,7 +248,7 @@ type Person = {
 };
 ```
 
-Supporting types (`Employment`, `FinancialFact`, `TravelRecord`, `Incident`, `BankRelation`, `PaymentCard`, `PhoneReputation`) follow the same pattern: structured fields + `provenance[]`.
+Supporting types (`Employment`, `FinancialFact`, `TravelRecord`, `BankRelation`, `PaymentCard`, `PhoneReputation`) follow the same pattern: structured fields + `provenance[]`.
 
 ## Invariants & Rules
 
@@ -219,7 +256,14 @@ Supporting types (`Employment`, `FinancialFact`, `TravelRecord`, `Incident`, `Ba
 - Merge is an explicit domain command that produces an audit event; it never happens silently.
 - Soft-delete only; hard delete is a privileged, logged operation.
 - Confidence scores are informational; UI must always show sources.
+- Criminal / scoring data is first-class (RiskScore + Incident), not free-text notes.
 
-## Mapping from Void reports
+## Mapping from report formats
 
-See `Report-Mapping.md` for the detailed field-by-field correspondence.
+| Format | Document |
+|--------|----------|
+| Void HTML / JSON embed | `Report-Mapping.md` (Format A) |
+| Sectioned plain text (`===` headers) | `Report-Mapping.md` (Format B) |
+| Inline dossier / scoring (`====`, inline Key : Value) | `Inline-Dossier-Mapping.md` |
+
+All formats normalize into the same Person aggregate and child entities above.
