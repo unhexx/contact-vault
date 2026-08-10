@@ -2,42 +2,74 @@
 
 **Status:** Accepted  
 **Date:** 2026-08-10  
-**Updated:** 2026-08-10 — added sectioned-text format
+**Updated:** 2026-08-10 — added sectioned-text and inline-dossier formats
 
 ## Decision
 
-Support two first-class input formats that both produce the same domain DTOs.
+Support **three first-class input formats** that all produce the same domain DTOs.
 
 ### Format detection
 
-| Signal | Format |
-|--------|--------|
+| Signal | Format ID |
+|--------|-----------|
 | HTML doctype / `__report_embed__` / Void SPA markers | `void-html` |
-| ≥1 line matching `=== ... ===` | `sectioned-text` |
+| Clean `=== Source ===` headers + mostly one key-value per line | `sectioned-text` |
+| `\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u0441\u043a\u043e\u0440\u0438\u043d\u0433\u0430` / high density of inline `\u0418\u043c\u044f :` \u2026 `Key :` after `====` | `inline-dossier` |
 | Otherwise | `unknown` (reject or best-effort) |
 
-### void-html pipeline
+Detection runs in `packages/parser` \u2192 `detectFormat.ts`. Prefer the most specific match.
 
-1. Extract embedded JSON (`__REPORT_EMBED__` / `#__report_embed__`)
-2. If missing → structural DOM parse of known cards
-3. Map collectors → domain DTOs + provenance
+### Pipelines
 
-### sectioned-text pipeline
+1. **void-html**  
+   Extract embedded JSON \u2192 collectors \u2192 domain facts + provenance.
 
-1. Split into sections by `=== Title ===` headers
-2. Parse key: value lines; support multi-value (comma-separated) and multi-record sections
-3. Apply Russian key alias table → domain fields
-4. Treat `Общая сводка` as seed summary
-5. Unknown keys → `extras` bag (never drop)
-6. Related-person heuristic (different FIO+DOB sharing phone) → Relationship or Person stub
+2. **sectioned-text**  
+   Split on `=== Title ===` \u2192 parse line-oriented `Key: Value` \u2192 alias table \u2192 domain.  
+   See `docs/02-DOMAIN/Text-Report-Mapping.md` / Report-Mapping Format B.
+
+3. **inline-dossier**  
+   Extract scoring header \u2192 RiskScore.  
+   Split records on `\u0418\u043c\u044f\\s*:` (with optional preceding `====`).  
+   Tokenize **inline** `Key : Value` with longest-key-first.  
+   Map criminal sections \u2192 Incident; incomes \u2192 FinancialFact; vehicles \u2192 Vehicle; etc.  
+   See `docs/02-DOMAIN/Inline-Dossier-Mapping.md`.
 
 ### Shared rules
 
-- Pure functions only inside `packages/parser` (no DB)
-- Every fact carries Provenance (`sourceName` = section/source title)
-- Idempotent by `sha256(payload)` + query fingerprint
-- Warnings array for ambiguous parses (agents must surface in UI later)
+- Pure functions only inside `packages/parser` (no DB I/O).
+- Every fact carries Provenance (`sourceName` = section/source title).
+- Idempotent by `sha256(payload)` + query fingerprint.
+- Unknown keys go to `extras` / meta \u2014 never silently dropped.
+- Warnings array for ambiguous parses (surface in UI later).
+- Sensitive telecom secrets (PIN/PUK/IMEI): respect product policy; may redact with flag.
+
+### Package layout (target)
+
+```
+packages/parser/
+  src/
+    detectFormat.ts
+    voidHtml/
+    sectionedText/
+    inlineDossier/
+      extractScoring.ts
+      splitRecords.ts
+      parseInlineKV.ts
+      mapToDomain.ts
+    normalize/          # phone E.164, FIO, dates, document types
+    index.ts            # parseReport(input) \u2192 ParseResult
+```
+
+`ParseResult` = `{ format, reportMeta, persons: PersonDraft[], relationships, riskScores?, warnings[] }`.
 
 ## Consequences
 
-One domain model, multiple report dialects. Agents can add a new text key alias without touching HTML parsers.
+- One domain model serves all dialects.
+- Agents can add a new key alias or a new format front-end without changing storage or UI contracts.
+- Criminal / scoring data is first-class (RiskScore + Incident), not buried in free-text notes.
+
+## Follow-up
+
+- Golden sanitized fixtures for all three formats under `fixtures/`.
+- Optional promotion of telecom history to a dedicated `TelecomSubscription` entity (v1.1).
