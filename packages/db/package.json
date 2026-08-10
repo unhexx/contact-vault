@@ -14,17 +14,21 @@
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "lint": "echo \"No lint configured yet\"",
-    "db:generate": "echo \"Prisma schema lands in PR3 — skip generate\"",
-    "db:migrate": "echo \"Prisma schema lands in PR3 — skip migrate\"",
-    "db:studio": "echo \"Prisma schema lands in PR3 — skip studio\""
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:push": "prisma db push"
   },
   "dependencies": {
-    "@contact-vault/domain": "workspace:*"
+    "@contact-vault/domain": "workspace:*",
+    "@prisma/client": "^6.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "prisma": "^6.1.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }
