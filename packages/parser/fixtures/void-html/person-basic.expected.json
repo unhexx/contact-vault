@@ -1,0 +1,14 @@
+{
+  "format": "void-html",
+  "personsLength": 1,
+  "canonicalNameFull": "Тестов Тест Тестович",
+  "dateOfBirth": "1990-01-15",
+  "placeOfBirth": "г. Москва",
+  "phoneE164": "+79000000001",
+  "email": "testov.fake@example.com",
+  "documentTypes": ["passport_ru", "snils"],
+  "addressRaw": "г. Москва, ул. Примерная, д. 1, кв. 1",
+  "relationshipFio": "Тестова Анна Тестовна",
+  "hasUnmappedBanks": true,
+  "reportQuery": "+79000000001"
+}

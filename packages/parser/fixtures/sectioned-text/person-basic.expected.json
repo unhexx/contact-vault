@@ -1,0 +1,14 @@
+{
+  "format": "sectioned-text",
+  "personsLength": 1,
+  "canonicalNameFull": "Тестов Тест Тестович",
+  "dateOfBirth": "1990-01-15",
+  "placeOfBirth": "г. Москва",
+  "phoneE164": "+79000000001",
+  "email": "testov.fake@example.com",
+  "hasSnils": true,
+  "hasPassport": true,
+  "addressContains": "Примерная",
+  "hasUnknownKeyWarning": true,
+  "hasTelegram": true
+}
