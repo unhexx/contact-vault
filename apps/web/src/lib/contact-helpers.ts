@@ -61,6 +61,7 @@ export const CONTACT_360_TABS = [
   "documents",
   "addresses",
   "network",
+  "risk",
   "sources",
 ] as const;
 
@@ -71,4 +72,36 @@ export function isContact360Tab(v: string | null | undefined): v is Contact360Ta
     !!v &&
     (CONTACT_360_TABS as readonly string[]).includes(v)
   );
+}
+
+/** Format risk overall (0..1) for display, e.g. 0.8 */
+export function formatRiskOverall(overall: number): string {
+  if (!Number.isFinite(overall)) return "—";
+  // Prefer one decimal when needed; keep 0 / 1 clean.
+  const rounded = Math.round(overall * 100) / 100;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+/** Color tone for risk overall (≥0.7 destructive, ≥0.4 amber, else muted). */
+export function riskOverallTone(
+  overall: number,
+): "destructive" | "warning" | "muted" {
+  if (overall >= 0.7) return "destructive";
+  if (overall >= 0.4) return "warning";
+  return "muted";
+}
+
+/** Badge variant for incident severity. */
+export function incidentSeverityVariant(
+  severity: "high" | "medium" | "low",
+): "destructive" | "warning" | "secondary" {
+  switch (severity) {
+    case "high":
+      return "destructive";
+    case "medium":
+      return "warning";
+    case "low":
+    default:
+      return "secondary";
+  }
 }
