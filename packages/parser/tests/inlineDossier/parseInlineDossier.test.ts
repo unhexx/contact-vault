@@ -132,6 +132,31 @@ LabelSrc==== Имя : Тестов Тест Тестович Телефон : +7
     expect(facts.every((f) => !/LabelSrc/i.test(f.raw))).toBe(true);
     expect(facts.some((f) => f.employer?.includes("Ромашка"))).toBe(true);
   });
+
+  it("keeps sole single-token Адреса body (Issue 7 — no over-strip)", () => {
+    const content = "====Адреса====\nМосква\n";
+    const blocks = extractBlocks(content);
+    expect(blocks.addressesRaw).toBe("Москва");
+  });
+
+  it("keeps sole Москва before Label==== Имя (Issue 7)", () => {
+    const content =
+      "====Адреса====\nМосква\nLabel==== Имя : Тестов Тест Тестович Телефон : +7 900 000-00-01\n";
+    const blocks = extractBlocks(content);
+    expect(blocks.addressesRaw).toBe("Москва");
+    expect(blocks.addressesRaw).not.toMatch(/Label/);
+  });
+
+  it("stops same-line Label==== Имя without leading newline (Issue 8)", () => {
+    const content =
+      "====Адреса====\nг. Москва; г. Тверь LabelSrc==== Имя : Тестов Тест Тестович\n";
+    const blocks = extractBlocks(content);
+    expect(blocks.addressesRaw).toBeDefined();
+    expect(blocks.addressesRaw).toMatch(/Москва/);
+    expect(blocks.addressesRaw).toMatch(/Тверь/);
+    expect(blocks.addressesRaw).not.toMatch(/LabelSrc/);
+    expect(blocks.addressesRaw).not.toMatch(/Имя/);
+  });
 });
 
 describe("extractScoring", () => {

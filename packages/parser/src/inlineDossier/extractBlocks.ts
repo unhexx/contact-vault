@@ -11,37 +11,25 @@ export type ExtractedBlocks = {
 /**
  * Block body ends before:
  * - next ====Доходы==== / ====Адреса==== header
- * - record delimiter Label==== Имя : (source label must NOT be absorbed into block)
- * - bare Имя : at line start
+ * - record delimiter Label==== Имя : (with or without leading newline — Issue 8)
+ * - bare Имя : at line start (newline-required to avoid mid-prose matches)
  * - EOS
  *
  * Critical: `(?:={3,}\s*)?Имя` alone is wrong — optional equals sits in the lookahead
  * and leaves `ИсточникТест` inside the capture (Issue 1).
+ * Use `\S+={3,}\s*Имя` so the source label is part of the stop pattern, not the body.
  */
 // NOTE: do NOT use /m — `$` would match end-of-line and truncate multi-line bodies.
 const BLOCK_RE =
-  /====\s*(Доходы|Адреса)\s*====\s*([\s\S]*?)(?=\n====\s*(?:Доходы|Адреса)\s*====|\n\S+={3,}\s*Имя\s*:|\n\s*Имя\s*:|$)/gi;
+  /====\s*(Доходы|Адреса)\s*====\s*([\s\S]*?)(?=\n====\s*(?:Доходы|Адреса)\s*====|\S+={3,}\s*Имя\s*:|\n\s*Имя\s*:|$)/gi;
 
 /**
- * Defense-in-depth: drop a trailing bare source-label line (no address/income markers).
+ * Only strip a true trailing source-label stub: `Label====` with no following Имя
+ * (partial delimiter left if content was malformed). Never drop arbitrary single-word
+ * lines like `Москва` or `Зарплата` (Issue 7).
  */
-function stripTrailingSourceLabel(body: string): string {
-  let cleaned = body.trim();
-  // Trailing "Label====" without Имя (shouldn't happen with fixed lookahead, but safe)
-  cleaned = cleaned.replace(/(?:\r?\n)+\S+={3,}\s*$/u, "").trim();
-
-  const lines = cleaned.split(/\n/);
-  if (lines.length === 0) return cleaned;
-  const last = lines[lines.length - 1]!.trim();
-  if (
-    last &&
-    !/[;,]|г\.|ул\.|д\.|обл|край|респ|\d{4,}|ооо|ип/i.test(last) &&
-    /^[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9_]*$/.test(last)
-  ) {
-    lines.pop();
-    cleaned = lines.join("\n").trim();
-  }
-  return cleaned;
+function stripTrailingSourceLabelStub(body: string): string {
+  return body.replace(/(?:\r?\n)+\S+={3,}\s*$/u, "").trim();
 }
 
 /**
@@ -56,7 +44,7 @@ export function extractBlocks(content: string): ExtractedBlocks {
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
     const title = m[1]!.toLowerCase();
-    const body = stripTrailingSourceLabel(m[2] ?? "");
+    const body = stripTrailingSourceLabelStub(m[2] ?? "");
     if (title === "доходы") {
       incomesRaw = body;
     } else if (title === "адреса") {
