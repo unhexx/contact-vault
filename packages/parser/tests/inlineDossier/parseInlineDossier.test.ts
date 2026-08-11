@@ -8,8 +8,19 @@ import {
   type IdentityDocument,
 } from "@contact-vault/domain";
 import { describe, expect, it } from "vitest";
-import { parseInlineKV, knownKeysSorted } from "../../src/inlineDossier/parseInlineKV.js";
-import { extractScoring, normalizeOverallScore } from "../../src/inlineDossier/extractScoring.js";
+import {
+  extractBlocks,
+  parseIncomesBlock,
+} from "../../src/inlineDossier/extractBlocks.js";
+import {
+  extractScoring,
+  normalizeOverallScore,
+} from "../../src/inlineDossier/extractScoring.js";
+import {
+  knownKeysSorted,
+  MAX_SCAN_LEN,
+  parseInlineKV,
+} from "../../src/inlineDossier/parseInlineKV.js";
 import { parseReport } from "../../src/index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -76,13 +87,50 @@ describe("parseInlineKV longest-key-first", () => {
   });
 
   it("prefers Дата выдачи паспорта over Дата", () => {
-    const pairs = parseInlineKV(
+    const { pairs } = parseInlineKV(
       "Имя : Тест Дата выдачи паспорта : 01.06.2015 Паспорт : 00 00 000000",
     );
     const keys = pairs.map((p) => p.key);
     expect(keys).toContain("Дата выдачи паспорта");
     const issued = pairs.find((p) => p.key === "Дата выдачи паспорта");
     expect(issued?.value).toContain("01.06.2015");
+  });
+
+  it("flags truncation past MAX_SCAN_LEN (INLINE_KV_TRUNCATED path)", () => {
+    const huge = `Имя : ${"A".repeat(MAX_SCAN_LEN + 100)} Телефон : +79001112233`;
+    const { pairs, truncated } = parseInlineKV(huge);
+    expect(truncated).toBe(true);
+    // Phone after the cap is dropped when FIO value alone exceeds the window
+    expect(pairs.some((p) => p.key === "Телефон")).toBe(false);
+  });
+});
+
+describe("extractBlocks source-label boundary (Issue 1)", () => {
+  it("does not absorb Label==== Имя into Адреса / Доходы bodies", () => {
+    const content = load("inline-dossier", "person-scoring-basic.txt");
+    const blocks = extractBlocks(content);
+    expect(blocks.addressesRaw).toBeDefined();
+    expect(blocks.addressesRaw).not.toMatch(/ИсточникТест/);
+    expect(blocks.addressesRaw).toMatch(/Москва/);
+    expect(blocks.addressesRaw).toMatch(/Тверь/);
+
+    expect(blocks.incomesRaw).toBeDefined();
+    expect(blocks.incomesRaw).not.toMatch(/ИсточникТест/);
+    expect(blocks.incomesRaw).toMatch(/ТестСтрой/);
+  });
+
+  it("Доходы body excludes next Label==== Имя source token", () => {
+    const content = `====Доходы====
+ООО Ромашка 100000 2021
+
+LabelSrc==== Имя : Тестов Тест Тестович Телефон : +7 900 000-00-01
+`;
+    const blocks = extractBlocks(content);
+    expect(blocks.incomesRaw).toBeDefined();
+    expect(blocks.incomesRaw).not.toMatch(/LabelSrc/);
+    const facts = parseIncomesBlock(blocks.incomesRaw!);
+    expect(facts.every((f) => !/LabelSrc/i.test(f.raw))).toBe(true);
+    expect(facts.some((f) => f.employer?.includes("Ромашка"))).toBe(true);
   });
 });
 
@@ -116,6 +164,7 @@ describe("parseReport inline-dossier", () => {
     expect(result.reportMeta.contentHash).toBe(contentHashOf(content));
 
     const person = result.persons[0]!;
+    // Full draft validity enforced here (assertions JSON is a thin map, not a draft)
     const parsed = PersonDraftSchema.safeParse(person);
     if (!parsed.success) {
       console.error(parsed.error.issues);
@@ -172,28 +221,56 @@ describe("parseReport inline-dossier", () => {
       ),
     ).toBe(true);
 
-    // financialFacts in extras
+    // Addresses: real city blobs only — no source-label junk (Issue 1/2)
+    const addressRaws = person.addresses.map((a) => a.raw);
+    expect(addressRaws.some((r) => r.includes("Москва"))).toBe(true);
+    expect(addressRaws.some((r) => r.includes("Тверь") || r.includes("Примерная"))).toBe(
+      true,
+    );
+    expect(addressRaws.some((r) => /ИсточникТест|СвязанныеИсточник/i.test(r))).toBe(
+      false,
+    );
+    // At least one from Адреса block + one from per-record Адрес
+    expect(person.addresses.length).toBeGreaterThanOrEqual(2);
+    expect(
+      person.addresses.some((a) =>
+        a.provenance.some((p) => p.sourceName === "Адреса"),
+      ),
+    ).toBe(true);
+
+    // financialFacts in extras (from ====Доходы==== lean rows only)
     expect(
       Array.isArray(person.extras?.financialFacts) &&
         (person.extras!.financialFacts as unknown[]).length >= 1,
     ).toBe(true);
+    // No source-label income junk
+    const facts = person.extras!.financialFacts as Array<{ raw?: string }>;
+    expect(facts.every((f) => !/ИсточникТест/i.test(f.raw ?? ""))).toBe(true);
 
     expect(everyFactHasReportId(person, REPORT_ID)).toBe(true);
 
     const expected = JSON.parse(
-      load("inline-dossier", "person-scoring-basic.expected.json"),
+      load("inline-dossier", "person-scoring-basic.assertions.json"),
     ) as {
       format: string;
       personsLength: number;
       phoneE164: string;
       relationshipFio: string;
       minRelationships: number;
+      addressContains: string[];
+      addressMustNotContain: string[];
     };
     expect(result.format).toBe(expected.format);
     expect(result.persons).toHaveLength(expected.personsLength);
     expect(person.relationships.length).toBeGreaterThanOrEqual(
       expected.minRelationships,
     );
+    for (const needle of expected.addressContains) {
+      expect(addressRaws.some((r) => r.includes(needle))).toBe(true);
+    }
+    for (const bad of expected.addressMustNotContain) {
+      expect(addressRaws.some((r) => r.includes(bad))).toBe(false);
+    }
   });
 
   it("scoring-only → empty persons + SCORING_ONLY_NO_PERSON", () => {
@@ -223,5 +300,22 @@ describe("parseReport inline-dossier", () => {
     expect(PersonDraftSchema.safeParse(person).success).toBe(true);
     expect(person.canonicalName?.full).toContain("Плотный");
     expect(person.riskScores).toHaveLength(0);
+  });
+
+  it("emits INLINE_KV_TRUNCATED warn when record body exceeds scan cap", () => {
+    // Scoring header forces inline-dossier detect; huge FIO value trips MAX_SCAN_LEN
+    const padding = "X".repeat(MAX_SCAN_LEN + 50);
+    const content = `Результаты скоринга
+Общий показатель: 0.1
+Src==== Имя : Тестов Огромный ${padding} Телефон : +7 900 000-00-99`;
+    const result = parseReport({
+      content,
+      filename: "huge.txt",
+      reportId: REPORT_ID,
+    });
+    expect(result.format).toBe("inline-dossier");
+    expect(
+      result.warnings.some((w) => w.code === "INLINE_KV_TRUNCATED"),
+    ).toBe(true);
   });
 });

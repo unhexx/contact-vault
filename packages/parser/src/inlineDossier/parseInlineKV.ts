@@ -5,7 +5,14 @@ export type InlineKvPair = {
   value: string;
 };
 
-const MAX_SCAN_LEN = 64 * 1024; // ReDoS / pathological safety cap
+export type ParseInlineKVResult = {
+  pairs: InlineKvPair[];
+  /** True when input exceeded MAX_SCAN_LEN and was sliced (INLINE_KV_TRUNCATED). */
+  truncated: boolean;
+};
+
+/** ReDoS / pathological safety cap (design: warn via INLINE_KV_TRUNCATED). */
+export const MAX_SCAN_LEN = 64 * 1024;
 
 let _sortedCache: string[] | null = null;
 
@@ -137,11 +144,14 @@ function collectKeyHits(text: string, keys: string[]): KeyHit[] {
  * Greedy longest-key-first for known keys (case-insensitive, ё→е).
  * Value runs until next key hit or EOS.
  * Unknown Key: segments that look like Key : Value but key not in table → still emit.
+ * Inputs longer than MAX_SCAN_LEN are sliced and `truncated: true` is set (caller warns).
  */
-export function parseInlineKV(text: string): InlineKvPair[] {
+export function parseInlineKV(text: string): ParseInlineKVResult {
   let input = text ?? "";
+  let truncated = false;
   if (input.length > MAX_SCAN_LEN) {
     input = input.slice(0, MAX_SCAN_LEN);
+    truncated = true;
   }
 
   const keys = knownKeysSorted();
@@ -164,5 +174,5 @@ export function parseInlineKV(text: string): InlineKvPair[] {
     pairs.push({ key: hit.key, value });
   }
 
-  return pairs;
+  return { pairs, truncated };
 }

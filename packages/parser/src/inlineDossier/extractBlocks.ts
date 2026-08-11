@@ -1,15 +1,52 @@
 export type ExtractedBlocks = {
   incomesRaw?: string;
   addressesRaw?: string;
-  /** Full content; person records found via splitRecords on Имя markers. */
+  /**
+   * Full content for record scan (splitRecords keys off Имя markers).
+   * Scoring header and block bodies remain in this string; they are not stripped.
+   */
   body: string;
 };
 
+/**
+ * Block body ends before:
+ * - next ====Доходы==== / ====Адреса==== header
+ * - record delimiter Label==== Имя : (source label must NOT be absorbed into block)
+ * - bare Имя : at line start
+ * - EOS
+ *
+ * Critical: `(?:={3,}\s*)?Имя` alone is wrong — optional equals sits in the lookahead
+ * and leaves `ИсточникТест` inside the capture (Issue 1).
+ */
+// NOTE: do NOT use /m — `$` would match end-of-line and truncate multi-line bodies.
 const BLOCK_RE =
-  /====\s*(Доходы|Адреса)\s*====\s*([\s\S]*?)(?=====\s*(?:Доходы|Адреса)\s*====|(?:={3,}\s*)?Имя\s*:|$)/gi;
+  /====\s*(Доходы|Адреса)\s*====\s*([\s\S]*?)(?=\n====\s*(?:Доходы|Адреса)\s*====|\n\S+={3,}\s*Имя\s*:|\n\s*Имя\s*:|$)/gi;
 
 /**
- * Extract ====Доходы==== / ====Адреса==== bodies; return remaining text as body for records.
+ * Defense-in-depth: drop a trailing bare source-label line (no address/income markers).
+ */
+function stripTrailingSourceLabel(body: string): string {
+  let cleaned = body.trim();
+  // Trailing "Label====" without Имя (shouldn't happen with fixed lookahead, but safe)
+  cleaned = cleaned.replace(/(?:\r?\n)+\S+={3,}\s*$/u, "").trim();
+
+  const lines = cleaned.split(/\n/);
+  if (lines.length === 0) return cleaned;
+  const last = lines[lines.length - 1]!.trim();
+  if (
+    last &&
+    !/[;,]|г\.|ул\.|д\.|обл|край|респ|\d{4,}|ооо|ип/i.test(last) &&
+    /^[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9_]*$/.test(last)
+  ) {
+    lines.pop();
+    cleaned = lines.join("\n").trim();
+  }
+  return cleaned;
+}
+
+/**
+ * Extract ====Доходы==== / ====Адреса==== bodies.
+ * `body` is the full input (records located via Имя markers in splitRecords).
  */
 export function extractBlocks(content: string): ExtractedBlocks {
   let incomesRaw: string | undefined;
@@ -19,7 +56,7 @@ export function extractBlocks(content: string): ExtractedBlocks {
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
     const title = m[1]!.toLowerCase();
-    const body = m[2]!.trim();
+    const body = stripTrailingSourceLabel(m[2] ?? "");
     if (title === "доходы") {
       incomesRaw = body;
     } else if (title === "адреса") {

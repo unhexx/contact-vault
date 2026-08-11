@@ -567,7 +567,8 @@ function applyPair(
     case "bank_account":
     case "card_number": {
       if (asRelatedOnly) return;
-      pushExtras(acc, key, v, "financialFacts");
+      // Distinct bag from ====Доходы==== lean financialFacts (no mixed shapes)
+      pushExtras(acc, key, v, "bankFacts");
       break;
     }
     case "citizenship": {
@@ -662,7 +663,15 @@ export function mapInlineToDomain(
   // Parse each record into KV pairs (prepend Имя : so leading FIO is keyed)
   const parsedRecords = records.map((r) => {
     const text = `Имя : ${r.body}`;
-    const pairs = parseInlineKV(text);
+    const { pairs, truncated } = parseInlineKV(text);
+    if (truncated) {
+      warnings.push({
+        code: "INLINE_KV_TRUNCATED",
+        message: `Inline KV scan truncated at safety cap for source "${r.sourceLabel}"`,
+        section: r.sourceLabel,
+        severity: "warn",
+      });
+    }
     return { ...r, pairs };
   });
 
