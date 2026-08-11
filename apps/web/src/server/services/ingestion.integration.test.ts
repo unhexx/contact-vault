@@ -11,9 +11,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createPrismaClient, type PrismaClient } from "@contact-vault/db";
+import { contentHashOf } from "@contact-vault/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { importReport } from "./ingestion.js";
+import { importReport, UNKNOWN_FORMAT_MESSAGE } from "./ingestion.js";
 import {
   dismissSuggestion,
   findNormKeyCollisions,
@@ -260,12 +261,26 @@ Email: dismiss.other.${stamp}@example.com
 
   it("rejects unknown format without writing completed import", async () => {
     const content = `not a real report ${Date.now()}`;
+    const hash = contentHashOf(content);
     await expect(
       importReport(
         { prisma, storeRawReports: false },
         { filename: "junk.txt", content },
       ),
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      appCode: "UNKNOWN_FORMAT",
+      message: UNKNOWN_FORMAT_MESSAGE,
+    });
+    // Thrown message names all three formats (via shared constant used by importReport)
+    expect(UNKNOWN_FORMAT_MESSAGE).toMatch(/void-html/);
+    expect(UNKNOWN_FORMAT_MESSAGE).toMatch(/sectioned-text/);
+    expect(UNKNOWN_FORMAT_MESSAGE).toMatch(/inline-dossier/);
+    // No ReportImport row written for this content
+    const row = await prisma.reportImport.findUnique({
+      where: { contentHash: hash },
+    });
+    expect(row).toBeNull();
   });
 
   it("imports void-html fixture", async () => {

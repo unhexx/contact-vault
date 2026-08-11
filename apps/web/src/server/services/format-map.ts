@@ -57,7 +57,7 @@ export function modeFromFormat(format: ApiReportFormat): string {
     case "void-html":
       return "void_html";
     case "sectioned-text":
-      return "sectioned_text"; // normalizeSourceMode aliases → text_export on write
+      return "sectioned_text"; // normalizeSourceMode aliases → text_export on read
     case "inline-dossier":
       return "inline_dossier"; // never store hyphen form
     default: {
