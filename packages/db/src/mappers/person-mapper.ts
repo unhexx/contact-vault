@@ -2,19 +2,23 @@ import type {
   Address as DomainAddress,
   ContactPoint,
   IdentityDocument,
+  Incident as DomainIncident,
   NameVariant,
   Person,
   Provenance,
   Relationship,
+  RiskScore as DomainRiskScore,
 } from "@contact-vault/domain";
 import type {
   Address,
   ContactPoint as DbContactPoint,
   IdentityDocument as DbIdentityDocument,
+  Incident as DbIncident,
   NameVariant as DbNameVariant,
   Person as DbPerson,
   PersonSourceReport,
   Relationship as DbRelationship,
+  RiskScore as DbRiskScore,
 } from "@prisma/client";
 
 export type PersonWithChildren = DbPerson & {
@@ -23,6 +27,8 @@ export type PersonWithChildren = DbPerson & {
   addresses: Address[];
   relationships: DbRelationship[];
   nameVariants: DbNameVariant[];
+  riskScores: DbRiskScore[];
+  incidents: DbIncident[];
   sourceReports: PersonSourceReport[];
 };
 
@@ -161,6 +167,42 @@ function mapNameVariant(nv: DbNameVariant): NameVariant {
   };
 }
 
+function mapRiskScore(row: DbRiskScore): DomainRiskScore {
+  const categories = Array.isArray(row.categories)
+    ? (row.categories as DomainRiskScore["categories"])
+    : [];
+  const articles = Array.isArray(row.articles)
+    ? (row.articles as DomainRiskScore["articles"])
+    : [];
+  return {
+    id: row.id,
+    overall: row.overall,
+    label: row.label ?? undefined,
+    categories,
+    articles,
+    provenance: asProvenanceArray(row.provenance),
+  };
+}
+
+function mapIncident(row: DbIncident): DomainIncident {
+  return {
+    id: row.id,
+    severity: row.severity,
+    title: row.title ?? undefined,
+    body:
+      row.body && typeof row.body === "object" && !Array.isArray(row.body)
+        ? (row.body as Record<string, string>)
+        : undefined,
+    articleCode: row.articleCode ?? undefined,
+    caseNumber: row.caseNumber ?? undefined,
+    sentenceDate: row.sentenceDate ?? undefined,
+    decision: row.decision ?? undefined,
+    region: row.region ?? undefined,
+    tags: row.tags.length > 0 ? row.tags : undefined,
+    provenance: asProvenanceArray(row.provenance),
+  };
+}
+
 const SOURCE_MODES = [
   "void_html",
   "text_export",
@@ -175,7 +217,7 @@ type SourceMode = (typeof SOURCE_MODES)[number];
 
 /**
  * Normalize PersonSourceReport.mode to domain Person.sourceReports[].mode.
- * Accepts ReportFormat aliases (sectioned_text, void-html) so 360 Sources keep signal.
+ * Accepts ReportFormat aliases (sectioned_text, void-html, inline-dossier) so 360 Sources keep signal.
  */
 export function normalizeSourceMode(
   mode: string | null | undefined,
@@ -187,6 +229,8 @@ export function normalizeSourceMode(
     void_html: "void_html",
     "void-html": "void_html",
     text_export: "text_export",
+    inline_dossier: "inline_dossier",
+    "inline-dossier": "inline_dossier",
   };
   if (mode in aliases) return aliases[mode];
   return (SOURCE_MODES as readonly string[]).includes(mode)
@@ -274,6 +318,12 @@ export function toDomainPerson(row: PersonWithChildren): Person {
     relationships: row.relationships
       .filter((r) => r.deletedAt == null)
       .map(mapRelationship),
+    riskScores: (row.riskScores ?? [])
+      .filter((r) => r.deletedAt == null)
+      .map(mapRiskScore),
+    incidents: (row.incidents ?? [])
+      .filter((r) => r.deletedAt == null)
+      .map(mapIncident),
     extras:
       row.extras && typeof row.extras === "object"
         ? (row.extras as Record<string, unknown>)
@@ -297,6 +347,8 @@ export const personInclude = {
   documents: { where: { deletedAt: null } },
   addresses: { where: { deletedAt: null } },
   relationships: { where: { deletedAt: null } },
+  riskScores: { where: { deletedAt: null } },
+  incidents: { where: { deletedAt: null } },
   nameVariants: true,
   sourceReports: true,
 } as const;

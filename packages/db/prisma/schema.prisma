@@ -11,9 +11,16 @@ datasource db {
 }
 
 enum ReportFormat {
-  void_html      @map("void-html")
-  sectioned_text @map("sectioned-text")
+  void_html       @map("void-html")
+  sectioned_text  @map("sectioned-text")
+  inline_dossier  @map("inline-dossier")
   unknown
+}
+
+enum IncidentSeverity {
+  high
+  medium
+  low
 }
 
 enum ReportImportStatus {
@@ -77,6 +84,8 @@ model Person {
   addresses                Address[]
   relationships            Relationship[]
   nameVariants             NameVariant[]
+  riskScores               RiskScore[]
+  incidents                Incident[]
   sourceReports            PersonSourceReport[]
   mergeSuggestionsAsTarget MergeSuggestion[]    @relation("SuggestionTarget")
   mergeSuggestionsAsNew    MergeSuggestion[]    @relation("SuggestionNew")
@@ -188,6 +197,42 @@ model Relationship {
 
   @@index([personId])
   @@index([relatedPersonId])
+}
+
+model RiskScore {
+  id         String    @id @default(uuid()) @db.Uuid
+  personId   String    @db.Uuid
+  person     Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  overall    Float
+  label      String?
+  categories Json // [{ name, flag }]
+  articles   Json // [{ code, category?, details? }]
+  provenance Json
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  @@index([personId])
+}
+
+model Incident {
+  id           String           @id @default(uuid()) @db.Uuid
+  personId     String           @db.Uuid
+  person       Person           @relation(fields: [personId], references: [id], onDelete: Cascade)
+  severity     IncidentSeverity
+  title        String?
+  body         Json?
+  articleCode  String?
+  caseNumber   String?
+  sentenceDate String?
+  decision     String?
+  region       String?
+  tags         String[]         @default([])
+  provenance   Json
+  createdAt    DateTime         @default(now())
+  deletedAt    DateTime?
+
+  @@index([personId])
+  @@index([articleCode])
 }
 
 model ReportImport {

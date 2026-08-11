@@ -93,6 +93,8 @@ export function draftPerson(opts: {
     documents,
     addresses: [],
     relationships: [],
+    riskScores: [],
+    incidents: [],
   };
 }
 
@@ -116,6 +118,8 @@ export async function truncateAll(prisma: PrismaClient): Promise<void> {
       "IdentityDocument",
       "Address",
       "Relationship",
+      "RiskScore",
+      "Incident",
       "NameVariant",
       "Person",
       "ReportImport"
@@ -146,7 +150,11 @@ export function createTestCtx(url?: string): TestCtx {
 
 export async function ensureReportImport(
   ctx: TestCtx,
-  opts?: { id?: string; contentHash?: string; format?: "void_html" | "sectioned_text" },
+  opts?: {
+    id?: string;
+    contentHash?: string;
+    format?: "void_html" | "sectioned_text" | "inline_dossier";
+  },
 ) {
   const id = opts?.id ?? randomUUID();
   const contentHash = opts?.contentHash ?? contentHashSynthetic(id);

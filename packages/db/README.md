@@ -46,7 +46,18 @@ pnpm db:migrate
 pnpm db:studio
 ```
 
-Initial migration: `prisma/migrations/0001_init/` (greenfield schema).
+Migrations:
+
+- `prisma/migrations/0001_init/` — greenfield schema
+- `prisma/migrations/0002_merge_suggestion_guards/` — merge suggestion CHECK + unique
+- `prisma/migrations/0003_inline_dossier_risk/` — `ReportFormat.inline_dossier`, `RiskScore`, `Incident`
+
+After pulling schema/migration changes:
+
+```bash
+pnpm db:generate
+pnpm --filter @contact-vault/db db:migrate:deploy
+```
 
 ## Integration tests
 

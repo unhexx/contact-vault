@@ -81,7 +81,11 @@ export type ListCursorPayload = {
   id: string;
 };
 
-export type ReportFormatDb = "void_html" | "sectioned_text" | "unknown";
+export type ReportFormatDb =
+  | "void_html"
+  | "sectioned_text"
+  | "inline_dossier"
+  | "unknown";
 export type ReportImportStatusDb =
   | "pending"
   | "parsed"
