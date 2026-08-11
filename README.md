@@ -41,7 +41,7 @@ contact-vault/
 │   ├── domain/               # Zod schemas, contentHash, merge helpers
 │   ├── parser/               # void-html + sectioned-text + inline-dossier pipelines
 │   ├── db/                   # Prisma schema + repositories
-│   └── ui/                   # empty stub (v0.1 UI lives in apps/web)
+│   └── ui/                   # empty stub (UI lives in apps/web)
 ├── samples/                  # synthetic reports (three formats)
 ├── scripts/                  # smoke-import + check-fixtures
 ├── docs/                     # product, domain, architecture, playbook
@@ -128,12 +128,12 @@ Playwright is **not** required for v0.1.1. Use the UI and/or `pnpm smoke`:
 2. Import `samples/void-html/person-basic.embed.html` → format `void-html`.
 3. Import `samples/inline-dossier/person-scoring-basic.txt` → format `inline-dossier`; Contact 360 **Risk** shows score.
 4. Open Contact 360; copy phone; check source badges.
-5. Re-import the same file → `duplicate: true`.
+5. Re-import `samples/sectioned-text/person-basic.txt` (same content as step 1) → `duplicate: true`.
 6. Import `samples/sectioned-text/person-variant-shared-phone.txt` → merge suggestions (no self-suggestion); Accept or Dismiss.
 7. After Accept: survivor **Sources** lists report imports from both persons.
 8. Soft-delete hides contact from list; 360 returns not found.
 
-`pnpm smoke` requires Docker Postgres (`docker compose up -d` + `pnpm db:migrate:deploy`). See script header in `scripts/smoke-import.ts`.
+`pnpm smoke` requires Docker Postgres (`docker compose up -d` + `pnpm db:migrate:deploy`). See script header in `scripts/smoke-import.ts`. Automated smoke is 7 API steps (no UI copy-phone step); it covers the three imports, sectioned re-import, merge accept, and soft-delete.
 
 ## Documentation Map
 

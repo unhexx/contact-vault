@@ -125,14 +125,23 @@ async function main(): Promise<void> {
       `person=${r2.personIds[0]!.slice(0, 8)}… format=${r2.format}`,
     );
 
-    // --- 3. inline-dossier import (scoring → riskScores on get360) ---
-    // Unique-ify phone/email so exact-match merge does not collide with prior steps
+    // --- 3. inline-dossier import (scoring → riskScores + incidents on get360) ---
+    // Unique-ify all exact-match keys so this step does not collide with prior imports
+    // (phone/email/passport/SNILS/INN + related phone — avoids Merge Inbox noise).
+    const stamp = String(Date.now()).slice(-7);
+    const passSerial = stamp.slice(0, 6).padStart(6, "0");
+    const snilsBody = `${stamp.slice(0, 3)}-${stamp.slice(3, 6)}-${stamp.slice(0, 3)}`;
+    const inn = `9${stamp.padStart(11, "0")}`;
     const inlineBase = load(samples.inlineDossier)
-      .replace(/\+7 900 000-00-01/g, `+7 900 ${String(Date.now()).slice(-7)}`)
+      .replace(/\+7 900 000-00-01/g, `+7 900 ${stamp}`)
+      .replace(/\+7 900 000-00-02/g, `+7 901 ${stamp}`)
       .replace(
         /testov\.fake@example\.com/g,
         `testov.smoke.${runId}@example.com`,
-      );
+      )
+      .replace(/00 00 000000/g, `99 99 ${passSerial}`)
+      .replace(/000-000-000 00/g, `${snilsBody} 00`)
+      .replace(/000000000000/g, inn);
     const inlineContent = inlineBase + tag;
     const rInline = await importReport(
       { prisma, storeRawReports: false, dataRoot: repoRoot },
@@ -149,6 +158,10 @@ async function main(): Promise<void> {
     assert(
       rInline.personIds.length >= 1,
       "inline-dossier must create ≥1 person",
+    );
+    assert(
+      rInline.mergeSuggestions.length === 0,
+      `inline-dossier step must not exact-match prior persons (got ${rInline.mergeSuggestions.length} suggestion(s))`,
     );
     const personInline = rInline.personIds[0]!;
     const viewInline = await personRepo.get360(personInline);
@@ -167,9 +180,20 @@ async function main(): Promise<void> {
       /плохо/i.test(riskLabel),
       `expected risk label to contain «плохо», got ${JSON.stringify(riskLabel)}`,
     );
+    assert(
+      (viewInline.incidents?.length ?? 0) >= 1,
+      "get360 must include incidents when fixture has scoring article lines",
+    );
+    const hasArticle228 = viewInline.incidents.some((i) =>
+      /228/.test(`${i.articleCode ?? ""}${i.title ?? ""}`),
+    );
+    assert(
+      hasArticle228,
+      "expected at least one incident with article code/title containing 228",
+    );
     log(
       "3 import inline-dossier",
-      `person=${personInline.slice(0, 8)}… format=${rInline.format} riskOverall=${overall}`,
+      `person=${personInline.slice(0, 8)}… format=${rInline.format} riskOverall=${overall} incidents=${viewInline.incidents.length}`,
     );
 
     // --- 4. re-import same sectioned content → duplicate ---

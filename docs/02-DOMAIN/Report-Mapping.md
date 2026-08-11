@@ -176,7 +176,7 @@ Synthetic sample: `samples/inline-dossier/person-scoring-basic.txt`.
 
 ---
 
-## Parser package layout (target)
+## Parser package layout
 
 ```
 packages/parser/
