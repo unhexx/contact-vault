@@ -31,6 +31,12 @@ export { AddressSchema, type Address } from "./address.js";
 // Relationship (KD17)
 export { RelationshipSchema, type Relationship } from "./relationship.js";
 
+// Risk score (v0.1.1)
+export { RiskScoreSchema, type RiskScore } from "./risk-score.js";
+
+// Incident (v0.1.1)
+export { IncidentSchema, type Incident } from "./incident.js";
+
 // Person draft vs person (KD5)
 export {
   NameVariantSchema,
