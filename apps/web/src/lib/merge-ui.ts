@@ -15,6 +15,8 @@ export type EntityCounts = {
   relationships: number;
   nameVariants: number;
   personSourceReports: number;
+  riskScores: number;
+  incidents: number;
 };
 
 const ENTITY_LABELS: Record<keyof EntityCounts, string> = {
@@ -24,6 +26,8 @@ const ENTITY_LABELS: Record<keyof EntityCounts, string> = {
   relationships: "Relationships",
   nameVariants: "Name variants",
   personSourceReports: "Source reports",
+  riskScores: "Risk scores",
+  incidents: "Incidents",
 };
 
 const FIELD_LABELS: Record<string, string> = {

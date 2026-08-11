@@ -20,11 +20,16 @@ import {
   Prisma,
   type MatchedOnField,
   type PrismaClient,
-  type ReportFormatDb,
 } from "@contact-vault/db";
 import { parseReport, type ParseWarning } from "@contact-vault/parser";
 
 import { AppError } from "../errors.js";
+import {
+  dbFormatToApi,
+  modeFromFormat,
+  parserFormatToDb,
+  type ApiReportFormat,
+} from "./format-map.js";
 
 /** Max UTF-16 code units of content string (~15M chars). */
 export const MAX_IMPORT_CHARS = 15_000_000;
@@ -33,7 +38,7 @@ const ALLOWED_FILENAME = /\.(html?|txt)$/i;
 
 export type ImportResult = {
   reportImportId: string;
-  format: "void-html" | "sectioned-text";
+  format: ApiReportFormat;
   contentHash: string;
   duplicate: boolean;
   warnings: ParseWarning[];
@@ -87,28 +92,6 @@ export function isContentHashUniqueViolation(err: unknown): boolean {
   return false;
 }
 
-function parserFormatToDb(
-  format: "void-html" | "sectioned-text",
-): ReportFormatDb {
-  return format === "void-html" ? "void_html" : "sectioned_text";
-}
-
-function dbFormatToApi(
-  format: string,
-): "void-html" | "sectioned-text" {
-  if (format === "void_html" || format === "void-html") return "void-html";
-  if (format === "sectioned_text" || format === "sectioned-text") {
-    return "sectioned-text";
-  }
-  // Should not reach for completed imports of supported formats
-  return "sectioned-text";
-}
-
-/** Source mode stored on PersonSourceReport (domain mode strings). */
-function modeFromFormat(format: "void-html" | "sectioned-text"): string {
-  return format === "void-html" ? "void_html" : "sectioned_text";
-}
-
 function asMatchedOn(value: unknown): MatchedOnField[] {
   if (!Array.isArray(value)) return [];
   return value as MatchedOnField[];
@@ -159,9 +142,19 @@ async function buildDuplicateResult(
     orderBy: { createdAt: "asc" },
   });
 
+  const apiFormat = dbFormatToApi(format);
+  // Completed imports of supported formats only (no silent sectioned fallback)
+  if (apiFormat === "unknown") {
+    throw new AppError(
+      "INTERNAL",
+      `Unexpected format on completed import: ${format}`,
+      "UNEXPECTED_FORMAT",
+    );
+  }
+
   return {
     reportImportId,
-    format: dbFormatToApi(format),
+    format: apiFormat,
     contentHash,
     duplicate: true,
     warnings: asWarnings(warnings),
@@ -224,7 +217,7 @@ export async function importReport(
   if (parsed.format === "unknown") {
     throw new AppError(
       "BAD_REQUEST",
-      "Could not detect report format (void-html or sectioned-text required)",
+      "Could not detect report format (void-html, sectioned-text, or inline-dossier required)",
       "UNKNOWN_FORMAT",
     );
   }
@@ -239,7 +232,8 @@ export async function importReport(
     );
   }
 
-  const apiFormat = parsed.format; // void-html | sectioned-text
+  // narrowed past "unknown" above
+  const apiFormat: ApiReportFormat = parsed.format;
   const dbFormat = parserFormatToDb(apiFormat);
   const mode = modeFromFormat(apiFormat);
   const byteSize = Buffer.byteLength(input.content, "utf8");

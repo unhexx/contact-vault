@@ -56,6 +56,17 @@ describe("contentHashOf (KD13 authority for ingestion)", () => {
   });
 });
 
+describe("UNKNOWN_FORMAT message (inline-dossier)", () => {
+  it("documents required formats including inline-dossier", () => {
+    // Keep in sync with AppError message in importReport when format is unknown
+    const msg =
+      "Could not detect report format (void-html, sectioned-text, or inline-dossier required)";
+    expect(msg).toContain("inline-dossier");
+    expect(msg).toContain("void-html");
+    expect(msg).toContain("sectioned-text");
+  });
+});
+
 describe("isContentHashUniqueViolation (Issue 1)", () => {
   function p2002(target: string | string[]): Prisma.PrismaClientKnownRequestError {
     return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {

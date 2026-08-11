@@ -38,6 +38,8 @@ type EntityCounts = {
   relationships: number;
   nameVariants: number;
   personSourceReports: number;
+  riskScores: number;
+  incidents: number;
 };
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -63,6 +65,8 @@ async function countChildren(
     relationships,
     nameVariants,
     personSourceReports,
+    riskScores,
+    incidents,
   ] = await Promise.all([
     prisma.contactPoint.count({
       where: { personId, deletedAt: null },
@@ -78,6 +82,12 @@ async function countChildren(
     }),
     prisma.nameVariant.count({ where: { personId } }),
     prisma.personSourceReport.count({ where: { personId } }),
+    prisma.riskScore.count({
+      where: { personId, deletedAt: null },
+    }),
+    prisma.incident.count({
+      where: { personId, deletedAt: null },
+    }),
   ]);
   return {
     contactPoints,
@@ -86,6 +96,8 @@ async function countChildren(
     relationships,
     nameVariants,
     personSourceReports,
+    riskScores,
+    incidents,
   };
 }
 
@@ -309,6 +321,8 @@ export async function mergePersons(
         relationships: [] as string[],
         nameVariants: [] as string[],
         personSourceReports: [] as string[],
+        riskScores: [] as string[],
+        incidents: [] as string[],
       };
       const skippedPersonSourceReportIds: string[] = [];
       const mergedIntoExisting: Array<{
@@ -456,6 +470,32 @@ export async function mergePersons(
           data: { personId: targetPersonId },
         });
         movedEntityIds.nameVariants.push(n.id);
+      }
+
+      // --- RiskScores: always move (KD34 — no dedupe) ---
+      const sourceRisks = await tx.riskScore.findMany({
+        where: { personId: sourcePersonId, deletedAt: null },
+        select: { id: true },
+      });
+      for (const rs of sourceRisks) {
+        await tx.riskScore.update({
+          where: { id: rs.id },
+          data: { personId: targetPersonId },
+        });
+        movedEntityIds.riskScores.push(rs.id);
+      }
+
+      // --- Incidents: always move (KD34 — no dedupe) ---
+      const sourceIncidents = await tx.incident.findMany({
+        where: { personId: sourcePersonId, deletedAt: null },
+        select: { id: true },
+      });
+      for (const inc of sourceIncidents) {
+        await tx.incident.update({
+          where: { id: inc.id },
+          data: { personId: targetPersonId },
+        });
+        movedEntityIds.incidents.push(inc.id);
       }
 
       // --- PersonSourceReport: move; unique conflict → drop source (KD22) ---

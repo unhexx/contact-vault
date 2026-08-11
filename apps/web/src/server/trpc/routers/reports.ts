@@ -4,14 +4,9 @@
 import { z } from "zod";
 
 import { AppError } from "../../errors.js";
+import { dbFormatToApi } from "../../services/format-map.js";
 import { importReport } from "../../services/ingestion.js";
 import { publicProcedure, router, wrap } from "../trpc.js";
-
-function dbFormatToApi(format: string): string {
-  if (format === "void_html") return "void-html";
-  if (format === "sectioned_text") return "sectioned-text";
-  return format;
-}
 
 export const reportsRouter = router({
   import: publicProcedure
