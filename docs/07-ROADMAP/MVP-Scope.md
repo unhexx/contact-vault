@@ -1,8 +1,8 @@
 # MVP Scope
 
-**Goal:** Import reports in **either** Void HTML **or** sectioned plain-text format and manage the resulting contact.
+**Goal (v0.1.0):** Import reports in **either** Void HTML **or** sectioned plain-text format and manage the resulting contact.
 
-## In scope
+## In scope (v0.1.0)
 
 ### Parser
 - Format detection: `void-html` | `sectioned-text`
@@ -27,9 +27,9 @@
 
 ## Out of scope
 
-Full vehicle photo pipelines, full financials/flights/incidents UI, advanced fuzzy merge wizard, multi-user auth, graph visualization, PIN/PUK as first-class secrets UI (store in meta only).
+Full vehicle photo pipelines, full financials/flights dedicated tabs, advanced fuzzy merge wizard, multi-user auth, graph visualization, PIN/PUK as first-class secrets UI (store in meta only).
 
-## Checklist
+## Checklist (v0.1.0)
 
 1. [x] Core documentation package (incl. dual-format mapping)
 2. [x] `packages/domain` Zod schemas
@@ -39,6 +39,21 @@ Full vehicle photo pipelines, full financials/flights/incidents UI, advanced fuz
 6. [x] Merge suggestion UI
 7. [x] Anonymized fixtures for **both** formats in `samples/`
 
-## Success criterion
+## Success criterion (v0.1.0)
 
 An agent following only the docs can import the attached-style `.txt` report **and** a Void HTML report, producing structured Contact 360 views without clarifying domain questions.
+
+---
+
+## Post-MVP: v0.1.1 — third format (`inline-dossier`)
+
+Shipped as a small post-MVP slice on top of the dual-format stack:
+
+| Area | Delivery |
+|------|----------|
+| Parser | `detectFormat` + `inlineDossier/**` pipeline; scoring → RiskScore / Incident |
+| Domain / DB | `RiskScore`, `Incident`, `ReportFormat.inline_dossier`; merge always-moves risk children |
+| UI | Three-format import copy; Contact 360 **Risk** tab + Overview teaser |
+| Packaging | `samples/inline-dossier/`, smoke third-format path, docs three-format table, version **0.1.1** |
+
+Still out of scope: dedicated Vehicles/Financials/Flights tabs, fuzzy merge wizard, multi-user auth.

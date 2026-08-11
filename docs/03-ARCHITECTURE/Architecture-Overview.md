@@ -13,7 +13,7 @@
 | Package | Role |
 |---------|------|
 | `packages/domain` | Types, Zod schemas, pure merge/score helpers |
-| `packages/parser` | Void HTML/JSON **and** sectioned-text → domain DTOs |
+| `packages/parser` | void-html, sectioned-text, **and** inline-dossier → domain DTOs |
 | `packages/db` | Prisma schema + repositories |
 | `packages/ui` | Shared shadcn-based components |
 | `apps/web` | Next.js 15 UI + tRPC |
@@ -21,7 +21,7 @@
 ## Import flow
 
 1. Upload file → store blob + content hash
-2. **Detect format** (`void-html` | `sectioned-text`)
+2. **Detect format** (`void-html` | `sectioned-text` | `inline-dossier`)
 3. Parse via format-specific pipeline → domain DTOs + provenance
 4. Match existing Person candidates
 5. Create Person or propose merge

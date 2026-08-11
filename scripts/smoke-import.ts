@@ -1,8 +1,9 @@
 /**
- * Local smoke import (PR8 release gate).
+ * Local smoke import (v0.1.1 release gate).
  *
- * Exercises dual-format import, re-import idempotency, merge accept path,
- * and soft-delete against Docker Postgres. No Playwright.
+ * Exercises three-format import (sectioned-text, void-html, inline-dossier),
+ * re-import idempotency, merge accept path, and soft-delete against Docker
+ * Postgres. No Playwright.
  *
  * Prerequisites:
  *   docker compose up -d
@@ -39,6 +40,10 @@ const samples = {
   voidHtml: path.join(
     repoRoot,
     "samples/void-html/person-basic.embed.html",
+  ),
+  inlineDossier: path.join(
+    repoRoot,
+    "samples/inline-dossier/person-scoring-basic.txt",
   ),
   variant: path.join(
     repoRoot,
@@ -120,7 +125,54 @@ async function main(): Promise<void> {
       `person=${r2.personIds[0]!.slice(0, 8)}… format=${r2.format}`,
     );
 
-    // --- 3. re-import same sectioned content → duplicate ---
+    // --- 3. inline-dossier import (scoring → riskScores on get360) ---
+    // Unique-ify phone/email so exact-match merge does not collide with prior steps
+    const inlineBase = load(samples.inlineDossier)
+      .replace(/\+7 900 000-00-01/g, `+7 900 ${String(Date.now()).slice(-7)}`)
+      .replace(
+        /testov\.fake@example\.com/g,
+        `testov.smoke.${runId}@example.com`,
+      );
+    const inlineContent = inlineBase + tag;
+    const rInline = await importReport(
+      { prisma, storeRawReports: false, dataRoot: repoRoot },
+      { filename: "person-scoring-basic.txt", content: inlineContent },
+    );
+    assert(
+      rInline.duplicate === false,
+      "inline-dossier import must not be duplicate",
+    );
+    assert(
+      rInline.format === "inline-dossier",
+      `expected inline-dossier, got ${rInline.format}`,
+    );
+    assert(
+      rInline.personIds.length >= 1,
+      "inline-dossier must create ≥1 person",
+    );
+    const personInline = rInline.personIds[0]!;
+    const viewInline = await personRepo.get360(personInline);
+    assert(viewInline, "get360 after inline-dossier import");
+    assert(
+      (viewInline.riskScores?.length ?? 0) >= 1,
+      "get360 must include riskScores when fixture has scoring",
+    );
+    const overall = viewInline.riskScores[0]!.overall;
+    assert(
+      typeof overall === "number" && Math.abs(overall - 0.8) < 1e-6,
+      `expected risk overall ≈ 0.8, got ${overall}`,
+    );
+    const riskLabel = viewInline.riskScores[0]!.label ?? "";
+    assert(
+      /плохо/i.test(riskLabel),
+      `expected risk label to contain «плохо», got ${JSON.stringify(riskLabel)}`,
+    );
+    log(
+      "3 import inline-dossier",
+      `person=${personInline.slice(0, 8)}… format=${rInline.format} riskOverall=${overall}`,
+    );
+
+    // --- 4. re-import same sectioned content → duplicate ---
     const rDup = await importReport(
       { prisma, storeRawReports: false, dataRoot: repoRoot },
       { filename: "person-basic.txt", content: txtContent },
@@ -134,9 +186,9 @@ async function main(): Promise<void> {
       JSON.stringify(rDup.personIds) === JSON.stringify(r1.personIds),
       "duplicate personIds must match original",
     );
-    log("3 re-import idempotent", `reportImportId=${rDup.reportImportId.slice(0, 8)}…`);
+    log("4 re-import idempotent", `reportImportId=${rDup.reportImportId.slice(0, 8)}…`);
 
-    // --- 4. variant sharing phone → merge suggestion ---
+    // --- 5. variant sharing phone → merge suggestion ---
     const variantContent = load(samples.variant) + tag + `\n# variant\n`;
     const r3 = await importReport(
       { prisma, storeRawReports: false, dataRoot: repoRoot },
@@ -157,11 +209,11 @@ async function main(): Promise<void> {
     }
     const sug = targetsFirst[0]!;
     log(
-      "4 merge suggestion",
+      "5 merge suggestion",
       `id=${sug.id.slice(0, 8)}… matchedOn=${sug.matchedOn.map((m) => m.field).join(",")}`,
     );
 
-    // --- 5. accept merge → survivor Sources include both imports ---
+    // --- 6. accept merge → survivor Sources include both imports ---
     const sourcePsrsBefore = await prisma.personSourceReport.findMany({
       where: { personId: sug.newPersonId },
     });
@@ -205,18 +257,20 @@ async function main(): Promise<void> {
       "domain person sourceReports ≥ 2 after merge",
     );
     log(
-      "5 merge accept + Sources",
+      "6 merge accept + Sources",
       `survivor=${sug.targetPersonId.slice(0, 8)}… psr=${targetPsrs.length}`,
     );
 
-    // --- 6. soft-delete hides from get360 ---
+    // --- 7. soft-delete hides from get360 ---
     const toDelete = r2.personIds[0]!;
     await personRepo.softDelete(toDelete);
     const gone = await personRepo.get360(toDelete);
     assert(gone === null, "get360 must return null after soft-delete");
-    log("6 soft-delete", `person=${toDelete.slice(0, 8)}… hidden`);
+    log("7 soft-delete", `person=${toDelete.slice(0, 8)}… hidden`);
 
-    console.log("\nSMOKE PASS — dual import, re-import, merge Sources, soft-delete OK");
+    console.log(
+      "\nSMOKE PASS — three-format import, re-import, merge Sources, soft-delete OK",
+    );
   } catch (err) {
     failed = true;
     console.error(

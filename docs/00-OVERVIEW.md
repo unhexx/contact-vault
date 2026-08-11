@@ -17,7 +17,17 @@ Development is expected to be performed primarily by neural-network coding agent
 
 ## Current phase
 
-**Documentation + scaffold.** Implementation of parser, domain services, and UI begins after the core docs and package skeletons are stable.
+**v0.1.1 released** — three ingestion formats, Contact 360 (including Risk), exact-match merge suggestions. See `docs/07-ROADMAP/MVP-Scope.md`.
+
+## Supported formats
+
+| Format ID | Typical input |
+|-----------|----------------|
+| `void-html` | Void Search SPA HTML with embedded JSON |
+| `sectioned-text` | Multi-source plain text with `=== section ===` headers |
+| `inline-dossier` | Dense inline key-value dossiers with optional scoring header |
+
+Mapping: `docs/02-DOMAIN/Report-Mapping.md` + `docs/02-DOMAIN/Inline-Dossier-Mapping.md`. Samples under `samples/`.
 
 ## Key design goals
 
@@ -25,8 +35,8 @@ Development is expected to be performed primarily by neural-network coding agent
 - **Best-practice contact model** (inspired by Salesforce Customer 360, JSContact, schema.org/Person, DDD)
 - **Agent-friendly contracts** (TypeScript + Zod + Prisma)
 - **Snappy UX** (optimistic updates, keyboard nav, copy-on-click, progressive disclosure)
-- **Extensible** to other report formats later
+- **Extensible** multi-format parser (`void-html` \| `sectioned-text` \| `inline-dossier`)
 
 ## Primary data source example
 
-Void Search self-contained HTML reports contain an embedded JSON payload (`status` / `data` with `profile`, `addresses`, `social_profiles`, `banks`, `groups`, etc.). The parser prioritizes this payload.
+Void Search self-contained HTML reports contain an embedded JSON payload (`status` / `data` with `profile`, `addresses`, `social_profiles`, `banks`, `groups`, etc.). The parser prioritizes this payload. Sectioned and inline-dossier text exports cover the same family of multi-source dossiers.

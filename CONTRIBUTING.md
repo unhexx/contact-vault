@@ -11,7 +11,7 @@
 
 - Types / Zod schemas first
 - Provenance is mandatory on every fact
-- Fixture tests for **each** parser format (`void-html`, `sectioned-text`)
+- Fixture tests for **each** parser format (`void-html`, `sectioned-text`, `inline-dossier`)
 - Never commit real PII — only synthetic data in `packages/parser/fixtures/` and `samples/`
 - Run `pnpm check:fixtures` before commit when touching fixtures/samples
 - Follow Definition of Done in the Agent Playbook
