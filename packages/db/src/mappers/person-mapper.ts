@@ -244,7 +244,8 @@ function mapSourceMode(mode: string | null | undefined): SourceMode | undefined 
 
 /**
  * Map Prisma person + children to domain Person.
- * Filters soft-deleted contact points / docs / addresses / relationships if present.
+ * Filters soft-deleted contact points / docs / addresses / relationships /
+ * risk scores / incidents if present.
  */
 export function toDomainPerson(row: PersonWithChildren): Person {
   const nameVariants = row.nameVariants.map(mapNameVariant);
