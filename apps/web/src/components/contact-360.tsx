@@ -38,6 +38,7 @@ import {
   formatRiskOverall,
   incidentSeverityVariant,
   isContact360Tab,
+  pickHighestRiskScore,
   primaryEmails,
   primaryPhones,
   riskOverallTone,
@@ -293,16 +294,27 @@ function EmptyHint({ children }: { children: ReactNode }) {
 }
 
 function OverviewTab({ person }: { person: Person }) {
+  const searchParams = useSearchParams();
   const phones = useMemo(() => primaryPhones(person), [person]);
   const emails = useMemo(() => primaryEmails(person), [person]);
   const socials = person.contactPoints.filter(
     (c) => c.kind === "social" || c.kind === "messenger",
   );
   const riskScores = person.riskScores ?? [];
-  const primaryRisk = riskScores[0];
+  // Prefer max overall after multi-score merge (KD34); first max wins ties
+  const primaryRisk = pickHighestRiskScore(riskScores);
+  const riskTone = primaryRisk
+    ? riskOverallTone(primaryRisk.overall)
+    : undefined;
   const highIncidentCount = (person.incidents ?? []).filter(
     (i) => i.severity === "high",
   ).length;
+  // Preserve other query params when linking to Risk (same as setTab)
+  const riskTabHref = useMemo(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "risk");
+    return `/contacts/${person.id}?${params.toString()}`;
+  }, [person.id, searchParams]);
 
   return (
     <Card>
@@ -352,15 +364,13 @@ function OverviewTab({ person }: { person: Person }) {
             <FactRow label="Risk">
               <div className="flex flex-wrap items-center gap-2">
                 <Link
-                  href={`/contacts/${person.id}?tab=risk`}
+                  href={riskTabHref}
                   className={cn(
                     "rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    riskOverallTone(primaryRisk.overall) === "destructive" &&
-                      "text-destructive",
-                    riskOverallTone(primaryRisk.overall) === "warning" &&
+                    riskTone === "destructive" && "text-destructive",
+                    riskTone === "warning" &&
                       "text-amber-700 dark:text-amber-300",
-                    riskOverallTone(primaryRisk.overall) === "muted" &&
-                      "text-muted-foreground",
+                    riskTone === "muted" && "text-muted-foreground",
                   )}
                 >
                   Risk: {formatRiskOverall(primaryRisk.overall)}
@@ -377,7 +387,7 @@ function OverviewTab({ person }: { person: Person }) {
             <FactRow label="Risk">
               <div className="flex flex-wrap items-center gap-2">
                 <Link
-                  href={`/contacts/${person.id}?tab=risk`}
+                  href={riskTabHref}
                   className="rounded-md text-sm font-medium text-destructive underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Incidents
@@ -929,6 +939,29 @@ function RiskTab({ person }: { person: Person }) {
                       </>
                     ) : null}
                   </dl>
+                  {inc.body && Object.keys(inc.body).length > 0 ? (
+                    <div className="space-y-1 rounded-md border bg-muted/20 px-2 py-1.5">
+                      {Object.entries(inc.body).map(([key, value]) => (
+                        <div
+                          key={key}
+                          className="flex flex-wrap items-baseline gap-1.5 text-xs text-muted-foreground"
+                        >
+                          {key !== "snippet" ? (
+                            <span className="font-medium capitalize">{key}:</span>
+                          ) : null}
+                          <CopyField
+                            value={value}
+                            label={
+                              key === "snippet"
+                                ? "Incident snippet"
+                                : `Body ${key}`
+                            }
+                            className="text-xs text-muted-foreground"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                   {inc.tags && inc.tags.length > 0 ? (
                     <ul className="flex flex-wrap gap-1">
                       {inc.tags.map((t) => (
