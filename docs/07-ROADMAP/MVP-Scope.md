@@ -29,6 +29,14 @@
 
 Full vehicle photo pipelines, full financials/flights dedicated tabs, advanced fuzzy merge wizard, multi-user auth, graph visualization, PIN/PUK as first-class secrets UI (store in meta only).
 
+---
+
+v0.1.0 is **shipped**. v0.1.1, v0.2.0, and later versions live in [Roadmap.md](./Roadmap.md).
+
+## v0.3 note
+
+Research (see Roadmap) changed the original vehicles-first sketch. **Bank relations** are the first v0.3 increment because PRD G1 already required mapping Void `banks`, and the embed fixture already has them. Vehicles and employment/financials follow as later v0.3.x slices. Vehicle **photo** pipelines remain out of scope.
+
 ## Checklist (v0.1.0)
 
 1. [x] Core documentation package (incl. dual-format mapping)
@@ -42,7 +50,3 @@ Full vehicle photo pipelines, full financials/flights dedicated tabs, advanced f
 ## Success criterion (v0.1.0)
 
 An agent following only the docs can import the attached-style `.txt` report **and** a Void HTML report, producing structured Contact 360 views without clarifying domain questions.
-
----
-
-v0.1.0 is **shipped**. v0.1.1, v0.2.0, and later versions live in [Roadmap.md](./Roadmap.md).

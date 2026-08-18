@@ -46,7 +46,7 @@ All three normalize into the same domain model (`Person` + children + `Provenanc
 | finance | FinancialFact[] |
 | flights / crossings | TravelRecord |
 | incidents | Incident[] |
-| banks / cards | BankRelation, PaymentCard |
+| banks | BankRelation[] (v0.3: `name` / `bank` / `bank_name` → bankName; optional account* → accountHint; `bik`/`bic`; other keys → extras). Cards stay unmapped. |
 | social_profiles | ContactPoint (social/messenger) |
 | phone_reviews | PhoneReputation |
 | person_info | bulk identity enrichment |

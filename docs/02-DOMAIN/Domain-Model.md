@@ -160,6 +160,22 @@ type Vehicle = {
 };
 ```
 
+### BankRelation
+
+First-class KYC/OSINT fact (v0.3). Bank **name** is required. Account numbers stay optional hints (as observed — do not invent masking). Unknown embed keys go in `extras`. Not a merge key.
+
+```ts
+type BankRelation = {
+  id?: string;                 // assigned on persist
+  bankName: string;
+  accountHint?: string;        // last4 / masked / source account token
+  role?: string;               // client, cardholder, … as observed
+  bik?: string;
+  extras?: Record<string, unknown>;
+  provenance: Provenance[];
+};
+```
+
 ### Relationship
 
 ```ts
@@ -248,13 +264,14 @@ type Person = {
 };
 ```
 
-Supporting types (`Employment`, `FinancialFact`, `TravelRecord`, `BankRelation`, `PaymentCard`, `PhoneReputation`) follow the same pattern: structured fields + `provenance[]`.
+Supporting types (`Employment`, `FinancialFact`, `TravelRecord`, `PaymentCard`, `PhoneReputation`) follow the same pattern: structured fields + `provenance[]`.
 
 ## Invariants & Rules
 
 - A Person should have at least one strong identifier (phone, email, passport, or high-confidence Name+DOB).
 - Matching rules produce `MergeSuggestion` only. Exact keys: phone e164 / emailNorm / document type+numberNorm. Name+DOB: `isLikelySamePerson` on canonical/variants **and** compatible partial DOB (equal or hyphen-boundary prefix). Missing DOB or conflicting full dates do not suggest. Never silent merge.
 - Merge is an explicit domain command that produces an audit event; it never happens silently.
+- BankRelation is a first-class child (v0.3). Merge always-moves bank rows. Bank name is not a matching key.
 - Person 360 **import timeline** is append-only: `PersonSourceReport` / ReportImport rows plus `audit_log` for that Person (`import` via source link, `merge` / `dismiss` / `soft_delete`). Newest first. Do not collapse or rewrite history.
 - Soft-delete only; hard delete is a privileged, logged operation.
 - Confidence scores are informational; UI must always show sources.
