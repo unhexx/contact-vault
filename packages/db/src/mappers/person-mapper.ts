@@ -2,19 +2,23 @@ import type {
   Address as DomainAddress,
   ContactPoint,
   IdentityDocument,
+  Incident as DomainIncident,
   NameVariant,
   Person,
   Provenance,
   Relationship,
+  RiskScore as DomainRiskScore,
 } from "@contact-vault/domain";
 import type {
   Address,
   ContactPoint as DbContactPoint,
   IdentityDocument as DbIdentityDocument,
+  Incident as DbIncident,
   NameVariant as DbNameVariant,
   Person as DbPerson,
   PersonSourceReport,
   Relationship as DbRelationship,
+  RiskScore as DbRiskScore,
 } from "@prisma/client";
 import { normalizeSourceMode } from "../format.js";
 
@@ -30,6 +34,8 @@ export type PersonWithChildren = DbPerson & {
   addresses: Address[];
   relationships: DbRelationship[];
   nameVariants: DbNameVariant[];
+  riskScores: DbRiskScore[];
+  incidents: DbIncident[];
   sourceReports: PersonSourceReportWithImport[];
 };
 
@@ -184,6 +190,42 @@ function sameNameParts(
   );
 }
 
+function mapRiskScore(row: DbRiskScore): DomainRiskScore {
+  const categories = Array.isArray(row.categories)
+    ? (row.categories as DomainRiskScore["categories"])
+    : [];
+  const articles = Array.isArray(row.articles)
+    ? (row.articles as DomainRiskScore["articles"])
+    : [];
+  return {
+    id: row.id,
+    overall: row.overall,
+    label: row.label ?? undefined,
+    categories,
+    articles,
+    provenance: asProvenanceArray(row.provenance),
+  };
+}
+
+function mapIncident(row: DbIncident): DomainIncident {
+  return {
+    id: row.id,
+    severity: row.severity,
+    title: row.title ?? undefined,
+    body:
+      row.body && typeof row.body === "object" && !Array.isArray(row.body)
+        ? (row.body as Record<string, string>)
+        : undefined,
+    articleCode: row.articleCode ?? undefined,
+    caseNumber: row.caseNumber ?? undefined,
+    sentenceDate: row.sentenceDate ?? undefined,
+    decision: row.decision ?? undefined,
+    region: row.region ?? undefined,
+    tags: row.tags.length > 0 ? row.tags : undefined,
+    provenance: asProvenanceArray(row.provenance),
+  };
+}
+
 export function asSourceWarnings(value: unknown): SourceWarning[] {
   if (!Array.isArray(value)) return [];
   const out: SourceWarning[] = [];
@@ -208,7 +250,8 @@ export function asSourceWarnings(value: unknown): SourceWarning[] {
 
 /**
  * Map Prisma person + children to domain Person.
- * Filters soft-deleted contact points / docs / addresses / relationships if present.
+ * Filters soft-deleted contact points / docs / addresses / relationships /
+ * risk scores / incidents if present.
  */
 export function toDomainPerson(row: PersonWithChildren): Person {
   const nameVariants = row.nameVariants.map(mapNameVariant);
@@ -281,6 +324,12 @@ export function toDomainPerson(row: PersonWithChildren): Person {
     relationships: row.relationships
       .filter((r) => r.deletedAt == null)
       .map(mapRelationship),
+    riskScores: (row.riskScores ?? [])
+      .filter((r) => r.deletedAt == null)
+      .map(mapRiskScore),
+    incidents: (row.incidents ?? [])
+      .filter((r) => r.deletedAt == null)
+      .map(mapIncident),
     extras:
       row.extras && typeof row.extras === "object"
         ? (row.extras as Record<string, unknown>)
@@ -305,6 +354,8 @@ export const personInclude = {
   documents: { where: { deletedAt: null } },
   addresses: { where: { deletedAt: null } },
   relationships: { where: { deletedAt: null } },
+  riskScores: { where: { deletedAt: null } },
+  incidents: { where: { deletedAt: null } },
   nameVariants: true,
   sourceReports: {
     include: {

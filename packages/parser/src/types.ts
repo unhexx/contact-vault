@@ -1,7 +1,11 @@
 import type { PersonDraft, Relationship } from "@contact-vault/domain";
 
-/** v0.1 formats (KD8). inline-dossier deferred. */
-export type ReportFormat = "void-html" | "sectioned-text" | "unknown";
+/** Supported report formats (v0.1.1 includes inline-dossier). */
+export type ReportFormat =
+  | "void-html"
+  | "sectioned-text"
+  | "inline-dossier"
+  | "unknown";
 
 export type ReportMeta = {
   /** Must equal contentHashOf(content) from @contact-vault/domain (KD13). */
@@ -12,7 +16,7 @@ export type ReportMeta = {
 };
 
 export type ParseWarning = {
-  code: string; // UNKNOWN_KEY | AMBIGUOUS_RECORD | EMPTY_SECTION | PHONE_UNNORMALIZED | UNMAPPED_SECTION | EMBED_MISSING | ...
+  code: string; // UNKNOWN_KEY | AMBIGUOUS_RECORD | EMPTY_SECTION | PHONE_UNNORMALIZED | UNMAPPED_SECTION | EMBED_MISSING | SCORING_ONLY_NO_PERSON | ...
   message: string;
   section?: string;
   key?: string;
@@ -22,9 +26,15 @@ export type ParseWarning = {
 export type ParseResult = {
   format: ReportFormat;
   reportMeta: ReportMeta;
-  /** v0.1: typically 0 or 1 primary person (KD17). */
+  /**
+   * Primary drafts; relationships/riskScores/incidents MUST live on each draft (KD27, KD38).
+   * Typically 0 or 1 primary person (KD17).
+   */
   persons: PersonDraft[];
-  /** Top-level optional; prefer nested under persons[].relationships. */
+  /**
+   * Top-level mirror only — ingestion IGNORES this for persistence.
+   * Prefer `persons[0].relationships` as authority; set top-level equal for test parity.
+   */
   relationships: Relationship[];
   warnings: ParseWarning[];
 };

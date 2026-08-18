@@ -1,0 +1,20 @@
+{
+  "_comment": "Thin assertion map for golden tests. Full PersonDraftSchema validity is enforced at runtime via PersonDraftSchema.safeParse(person) in parseInlineDossier.test.ts — this file is not a draft document.",
+  "format": "inline-dossier",
+  "personsLength": 1,
+  "canonicalNameFull": "Тестов Тест Тестович",
+  "dateOfBirth": "1990-01-15",
+  "phoneE164": "+79000000001",
+  "email": "testov.fake@example.com",
+  "hasPassport": true,
+  "hasSnils": true,
+  "riskOverall": 0.8,
+  "riskLabelContains": "плохо",
+  "incidentArticleContains": "228",
+  "relationshipFio": "Тестова Анна Тестовна",
+  "relationshipLabel": "ребенок",
+  "minRelationships": 1,
+  "sourceNameContains": "ИсточникТест",
+  "addressContains": ["Москва", "Тверь"],
+  "addressMustNotContain": ["ИсточникТест", "СвязанныеИсточник"]
+}

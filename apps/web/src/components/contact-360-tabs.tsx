@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, type ReactNode } from "react";
 import type { Person } from "@contact-vault/domain";
 
@@ -19,10 +20,14 @@ import {
   contactPointKindLabel,
   contactPointLabel,
   documentTypeLabel,
+  formatRiskOverall,
+  incidentSeverityVariant,
+  pickHighestRiskScore,
   primaryEmails,
   primaryPhones,
+  riskOverallTone,
 } from "@/lib/contact-helpers";
-import { formatDisplayDate } from "@/lib/utils";
+import { cn, formatDisplayDate } from "@/lib/utils";
 
 function FactRow({
   label,
@@ -46,11 +51,24 @@ function EmptyHint({ children }: { children: ReactNode }) {
 }
 
 export function OverviewTab({ person }: { person: Person }) {
+  const searchParams = useSearchParams();
   const phones = useMemo(() => primaryPhones(person), [person]);
   const emails = useMemo(() => primaryEmails(person), [person]);
   const socials = person.contactPoints.filter(
     (c) => c.kind === "social" || c.kind === "messenger",
   );
+  const primaryRisk = pickHighestRiskScore(person.riskScores ?? []);
+  const riskTone = primaryRisk
+    ? riskOverallTone(primaryRisk.overall)
+    : undefined;
+  const highIncidentCount = (person.incidents ?? []).filter(
+    (i) => i.severity === "high",
+  ).length;
+  const riskTabHref = useMemo(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "risk");
+    return `/contacts/${person.id}?${params.toString()}`;
+  }, [person.id, searchParams]);
 
   return (
     <Card>
@@ -96,6 +114,44 @@ export function OverviewTab({ person }: { person: Person }) {
               <EmptyHint>—</EmptyHint>
             )}
           </FactRow>
+          {primaryRisk ? (
+            <FactRow label="Risk">
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href={riskTabHref}
+                  className={cn(
+                    "rounded-md text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    riskTone === "destructive" && "text-destructive",
+                    riskTone === "warning" &&
+                      "text-amber-700 dark:text-amber-300",
+                    riskTone === "muted" && "text-muted-foreground",
+                  )}
+                >
+                  Risk: {formatRiskOverall(primaryRisk.overall)}
+                  {primaryRisk.label ? ` — ${primaryRisk.label}` : ""}
+                </Link>
+                {highIncidentCount > 0 ? (
+                  <Badge variant="destructive">
+                    {highIncidentCount} high severity
+                  </Badge>
+                ) : null}
+              </div>
+            </FactRow>
+          ) : highIncidentCount > 0 ? (
+            <FactRow label="Risk">
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href={riskTabHref}
+                  className="rounded-md text-sm font-medium text-destructive underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  Incidents
+                </Link>
+                <Badge variant="destructive">
+                  {highIncidentCount} high severity
+                </Badge>
+              </div>
+            </FactRow>
+          ) : null}
           <FactRow label="Phones">
             {phones.length === 0 ? (
               <EmptyHint>No phones</EmptyHint>
@@ -437,6 +493,271 @@ export function NetworkTab({ person }: { person: Person }) {
         </ul>
       </CardContent>
     </Card>
+  );
+}
+
+export function RiskTab({ person }: { person: Person }) {
+  const riskScores = person.riskScores ?? [];
+  const incidents = person.incidents ?? [];
+
+  if (riskScores.length === 0 && incidents.length === 0) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <EmptyHint>No risk scores or incidents</EmptyHint>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Risk scores</CardTitle>
+          <CardDescription>
+            Overall score, categories, and article codes from source reports
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {riskScores.length === 0 ? (
+            <EmptyHint>No risk scores</EmptyHint>
+          ) : (
+            <ul className="space-y-4">
+              {riskScores.map((rs, i) => {
+                const tone = riskOverallTone(rs.overall);
+                return (
+                  <li
+                    key={rs.id ?? i}
+                    className="space-y-3 rounded-lg border p-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={cn(
+                          "text-lg font-semibold tabular-nums",
+                          tone === "destructive" && "text-destructive",
+                          tone === "warning" &&
+                            "text-amber-700 dark:text-amber-300",
+                          tone === "muted" && "text-muted-foreground",
+                        )}
+                      >
+                        {formatRiskOverall(rs.overall)}
+                      </span>
+                      {rs.label ? (
+                        <Badge
+                          variant={
+                            tone === "destructive"
+                              ? "destructive"
+                              : tone === "warning"
+                                ? "warning"
+                                : "secondary"
+                          }
+                        >
+                          {rs.label}
+                        </Badge>
+                      ) : null}
+                      <SourceBadge provenance={rs.provenance} />
+                    </div>
+                    {rs.categories.length > 0 ? (
+                      <div>
+                        <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Categories
+                        </p>
+                        <ul className="flex flex-wrap gap-1.5">
+                          {rs.categories.map((cat, ci) => (
+                            <li key={`${cat.name}-${ci}`}>
+                              <Badge
+                                variant={
+                                  cat.flag === 1 ? "destructive" : "outline"
+                                }
+                                className={
+                                  cat.flag === 1 ? undefined : "font-normal"
+                                }
+                              >
+                                {cat.name}
+                                {cat.flag === 1 ? " · flag" : ""}
+                              </Badge>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {rs.articles.length > 0 ? (
+                      <div>
+                        <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Articles
+                        </p>
+                        <ul className="space-y-1.5">
+                          {rs.articles.map((art, ai) => (
+                            <li
+                              key={`${art.code}-${ai}`}
+                              className="rounded-md border bg-muted/20 px-2 py-1.5"
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <CopyField
+                                  value={art.code}
+                                  label="Article code"
+                                  mono
+                                />
+                                {art.category ? (
+                                  <Badge
+                                    variant="secondary"
+                                    className="font-normal"
+                                  >
+                                    {art.category}
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              {art.details ? (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {art.details}
+                                </p>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Incidents</CardTitle>
+          <CardDescription>
+            Criminal / case history with severity and identifiers
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {incidents.length === 0 ? (
+            <EmptyHint>No incidents</EmptyHint>
+          ) : (
+            <ul className="space-y-3">
+              {incidents.map((inc, i) => (
+                <li
+                  key={inc.id ?? i}
+                  className="space-y-2 rounded-lg border p-3 text-sm"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={incidentSeverityVariant(inc.severity)}>
+                      {inc.severity}
+                    </Badge>
+                    {inc.title ? (
+                      <span className="font-medium">{inc.title}</span>
+                    ) : null}
+                    <SourceBadge provenance={inc.provenance} />
+                  </div>
+                  <dl className="grid gap-1.5 sm:grid-cols-[120px_1fr]">
+                    {inc.articleCode ? (
+                      <>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Article
+                        </dt>
+                        <dd>
+                          <CopyField
+                            value={inc.articleCode}
+                            label="Article code"
+                            mono
+                          />
+                        </dd>
+                      </>
+                    ) : null}
+                    {inc.caseNumber ? (
+                      <>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Case
+                        </dt>
+                        <dd>
+                          <CopyField
+                            value={inc.caseNumber}
+                            label="Case number"
+                            mono
+                          />
+                        </dd>
+                      </>
+                    ) : null}
+                    {inc.sentenceDate ? (
+                      <>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Sentence date
+                        </dt>
+                        <dd>
+                          <CopyField
+                            value={inc.sentenceDate}
+                            label="Sentence date"
+                          />
+                        </dd>
+                      </>
+                    ) : null}
+                    {inc.decision ? (
+                      <>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Decision
+                        </dt>
+                        <dd>
+                          <CopyField value={inc.decision} label="Decision" />
+                        </dd>
+                      </>
+                    ) : null}
+                    {inc.region ? (
+                      <>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          Region
+                        </dt>
+                        <dd>
+                          <CopyField value={inc.region} label="Region" />
+                        </dd>
+                      </>
+                    ) : null}
+                  </dl>
+                  {inc.body && Object.keys(inc.body).length > 0 ? (
+                    <div className="space-y-1 rounded-md border bg-muted/20 px-2 py-1.5">
+                      {Object.entries(inc.body).map(([key, value]) => (
+                        <div
+                          key={key}
+                          className="flex flex-wrap items-baseline gap-1.5 text-xs text-muted-foreground"
+                        >
+                          {key !== "snippet" ? (
+                            <span className="font-medium capitalize">
+                              {key}:
+                            </span>
+                          ) : null}
+                          <CopyField
+                            value={value}
+                            label={
+                              key === "snippet"
+                                ? "Incident snippet"
+                                : `Body ${key}`
+                            }
+                            className="text-xs text-muted-foreground"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {inc.tags && inc.tags.length > 0 ? (
+                    <ul className="flex flex-wrap gap-1">
+                      {inc.tags.map((t) => (
+                        <li key={t}>
+                          <Badge variant="outline" className="font-normal">
+                            {t}
+                          </Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

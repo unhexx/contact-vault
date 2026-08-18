@@ -9,6 +9,7 @@ import { AppError } from "../errors.js";
 import {
   isContentHashUniqueViolation,
   MAX_IMPORT_CHARS,
+  UNKNOWN_FORMAT_MESSAGE,
   validateImportInput,
 } from "./ingestion.js";
 
@@ -53,6 +54,17 @@ describe("contentHashOf (KD13 authority for ingestion)", () => {
     const a = "line1\r\nline2\r\n";
     const b = "line1\nline2\n";
     expect(contentHashOf(a)).toBe(contentHashOf(b));
+  });
+});
+
+describe("UNKNOWN_FORMAT_MESSAGE (inline-dossier)", () => {
+  it("lists all three accepted formats (shared with importReport)", () => {
+    expect(UNKNOWN_FORMAT_MESSAGE).toContain("inline-dossier");
+    expect(UNKNOWN_FORMAT_MESSAGE).toContain("void-html");
+    expect(UNKNOWN_FORMAT_MESSAGE).toContain("sectioned-text");
+    expect(UNKNOWN_FORMAT_MESSAGE).toBe(
+      "Could not detect report format (void-html, sectioned-text, or inline-dossier required)",
+    );
   });
 });
 

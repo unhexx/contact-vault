@@ -1,8 +1,8 @@
 # Contact Vault
 
-**Contact management platform with OSINT report ingestion (Void HTML + sectioned text).**
+**Contact management platform with OSINT report ingestion (void-html, sectioned-text, inline-dossier).**
 
-Version **0.1.0** — strict MVP: dual-format import, Person 360 with provenance, exact-match merge *suggestions* (no silent auto-merge).
+Version **0.1.1** — three-format import, Person 360 with provenance and Risk tab, exact-match merge *suggestions* (no silent auto-merge).
 
 Designed for collaborative development by neural network agents. Parses person dossiers into a CRM domain model with full provenance, explicit merge control, and a modern responsive UI.
 
@@ -10,13 +10,13 @@ Designed for collaborative development by neural network agents. Parses person d
 
 Turn complex, multi-source person reports (Void Search HTML/JSON exports and similar) into a clean, queryable, auditable contact graph that feels as responsive and intuitive as modern personal CRMs while preserving every original fact and its source.
 
-## Core Capabilities (v0.1)
+## Core Capabilities (v0.1.1)
 
-- **Ingest** Void HTML (`void-html`) and sectioned plain-text (`sectioned-text`) reports
-- **Normalize** into Person + ContactPoints, IdentityDocuments, Addresses, Relationships
+- **Ingest** Void HTML (`void-html`), sectioned plain-text (`sectioned-text`), and inline-dossier scoring dumps (`inline-dossier`)
+- **Normalize** into Person + ContactPoints, IdentityDocuments, Addresses, Relationships; RiskScore + Incident from scoring headers
 - **Provenance** on every fact (report, source name, original key/value, timestamps)
 - **Merge suggestions** by exact phone / email / document — user confirms; no silent merge
-- **360° Contact View** — Overview / Identity / Documents / Addresses / Network / Sources; copy-on-click
+- **360° Contact View** — Overview / Identity / Documents / Addresses / Network / Risk / Sources; copy-on-click
 - **Responsive** dark/light UI — Next.js 15 + shadcn/ui
 
 ## Tech Stack (ADR-001)
@@ -39,10 +39,10 @@ contact-vault/
 ├── apps/web/                 # Next.js 15 + tRPC + UI
 ├── packages/
 │   ├── domain/               # Zod schemas, contentHash, merge helpers
-│   ├── parser/               # void-html + sectioned-text pipelines
+│   ├── parser/               # void-html + sectioned-text + inline-dossier pipelines
 │   ├── db/                   # Prisma schema + repositories
-│   └── ui/                   # empty stub (v0.1 UI lives in apps/web)
-├── samples/                  # synthetic reports (both formats)
+│   └── ui/                   # empty stub (UI lives in apps/web)
+├── samples/                  # synthetic reports (three formats)
 ├── scripts/                  # smoke-import + check-fixtures
 ├── docs/                     # product, domain, architecture, playbook
 ├── docker-compose.yml
@@ -95,7 +95,7 @@ pnpm dev
 pnpm typecheck
 pnpm test
 pnpm check:fixtures   # forbid-list: no non-synthetic markers in fixtures/samples
-pnpm smoke            # dual import + re-import + merge path (requires Postgres)
+pnpm smoke            # three-format import + re-import + merge path (requires Postgres)
 ```
 
 ### Optional env
@@ -116,20 +116,24 @@ Synthetic only — never commit real PII (see [Data-Handling](docs/08-LEGAL-ETHI
 | `samples/sectioned-text/person-basic.txt` | sectioned-text |
 | `samples/sectioned-text/person-variant-shared-phone.txt` | sectioned-text (shares phone with basic — for merge demos) |
 | `samples/void-html/person-basic.embed.html` | void-html |
+| `samples/inline-dossier/person-scoring-basic.txt` | inline-dossier (scoring → Risk tab) |
 
 Parser unit fixtures live under `packages/parser/fixtures/` (same synthetic policy).
 
 ## Manual smoke checklist (release gate)
 
-Playwright is **not** required for v0.1. Use the UI and/or `pnpm smoke`:
+Playwright is **not** required for v0.1.1. Use the UI and/or `pnpm smoke`:
 
 1. Import `samples/sectioned-text/person-basic.txt` → format `sectioned-text`, person in list.
 2. Import `samples/void-html/person-basic.embed.html` → format `void-html`.
-3. Open Contact 360; copy phone; check source badges.
-4. Re-import the same file → `duplicate: true`.
-5. Import `samples/sectioned-text/person-variant-shared-phone.txt` → merge suggestions (no self-suggestion); Accept or Dismiss.
-6. After Accept: survivor **Sources** lists report imports from both persons.
-7. Soft-delete hides contact from list; 360 returns not found.
+3. Import `samples/inline-dossier/person-scoring-basic.txt` → format `inline-dossier`; Contact 360 **Risk** shows score.
+4. Open Contact 360; copy phone; check source badges.
+5. Re-import `samples/sectioned-text/person-basic.txt` (same content as step 1) → `duplicate: true`.
+6. Import `samples/sectioned-text/person-variant-shared-phone.txt` → merge suggestions (no self-suggestion); Accept or Dismiss.
+7. After Accept: survivor **Sources** lists report imports from both persons.
+8. Soft-delete hides contact from list; 360 returns not found.
+
+`pnpm smoke` requires Docker Postgres (`docker compose up -d` + `pnpm db:migrate:deploy`). See script header in `scripts/smoke-import.ts`. Automated smoke is 7 API steps (no UI copy-phone step); it covers the three imports, sectioned re-import, merge accept, and soft-delete.
 
 ## Documentation Map
 
@@ -138,10 +142,12 @@ Playwright is **not** required for v0.1. Use the UI and/or `pnpm smoke`:
 | [docs/00-OVERVIEW.md](docs/00-OVERVIEW.md) | Project orientation for agents |
 | [docs/01-PRODUCT/PRD.md](docs/01-PRODUCT/PRD.md) | Product requirements |
 | [docs/02-DOMAIN/Domain-Model.md](docs/02-DOMAIN/Domain-Model.md) | Aggregates, entities, value objects |
-| [docs/02-DOMAIN/Report-Mapping.md](docs/02-DOMAIN/Report-Mapping.md) | Void / text → domain mapping |
+| [docs/02-DOMAIN/Report-Mapping.md](docs/02-DOMAIN/Report-Mapping.md) | void-html / sectioned-text / inline-dossier → domain |
+| [docs/02-DOMAIN/Inline-Dossier-Mapping.md](docs/02-DOMAIN/Inline-Dossier-Mapping.md) | Inline-dossier scoring format mapping |
 | [docs/03-ARCHITECTURE/](docs/03-ARCHITECTURE/) | Architecture + ADRs |
 | [docs/06-ENGINEERING/Agent-Playbook.md](docs/06-ENGINEERING/Agent-Playbook.md) | **How NN agents must work** |
-| [docs/07-ROADMAP/MVP-Scope.md](docs/07-ROADMAP/MVP-Scope.md) | What to build first (checklist complete for 0.1) |
+| [docs/07-ROADMAP/MVP-Scope.md](docs/07-ROADMAP/MVP-Scope.md) | v0.1.0 checklist (complete) |
+| [docs/07-ROADMAP/Roadmap.md](docs/07-ROADMAP/Roadmap.md) | Research notes + v0.1.1 and later |
 | [docs/08-LEGAL-ETHICS/Data-Handling.md](docs/08-LEGAL-ETHICS/Data-Handling.md) | PII / fixtures policy |
 
 ## Ethics & Legal

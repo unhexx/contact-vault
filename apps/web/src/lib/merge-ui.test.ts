@@ -44,13 +44,19 @@ describe("merge-ui helpers", () => {
       relationships: 3,
       nameVariants: 1,
       personSourceReports: 2,
+      riskScores: 2,
+      incidents: 3,
     };
-    expect(totalEntityCount(counts)).toBe(9);
+    expect(totalEntityCount(counts)).toBe(14);
     const entries = entityCountEntries(counts);
-    expect(entries).toHaveLength(6);
+    expect(entries).toHaveLength(8);
     expect(entries.find((e) => e.key === "personSourceReports")?.label).toBe(
       "Source reports",
     );
+    expect(entries.find((e) => e.key === "riskScores")?.label).toBe(
+      "Risk scores",
+    );
+    expect(entries.find((e) => e.key === "incidents")?.label).toBe("Incidents");
   });
 
   it("documents fixed merge direction", () => {

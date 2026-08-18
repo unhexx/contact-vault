@@ -1,9 +1,9 @@
 /**
  * Single place for report-format names across parser, Prisma, and domain.
  *
- * parser:   void-html | sectioned-text | unknown
- * Prisma:   void_html | sectioned_text | unknown
- * domain:   void_html | text_export | …
+ * parser:   void-html | sectioned-text | inline-dossier | unknown
+ * Prisma:   void_html | sectioned_text | inline_dossier | unknown
+ * domain:   void_html | text_export | inline_dossier | …
  *
  * Unknown stays unknown — never coerced to sectioned-text.
  */
@@ -13,6 +13,7 @@ import type { ReportFormatDb } from "./types.js";
 export const PARSER_FORMATS = [
   "void-html",
   "sectioned-text",
+  "inline-dossier",
   "unknown",
 ] as const;
 
@@ -35,6 +36,8 @@ const PARSER_TO_DB: Record<string, ReportFormatDb> = {
   void_html: "void_html",
   "sectioned-text": "sectioned_text",
   sectioned_text: "sectioned_text",
+  "inline-dossier": "inline_dossier",
+  inline_dossier: "inline_dossier",
   unknown: "unknown",
 };
 
@@ -43,6 +46,8 @@ const DB_TO_PARSER: Record<string, ParserFormat> = {
   "void-html": "void-html",
   sectioned_text: "sectioned-text",
   "sectioned-text": "sectioned-text",
+  inline_dossier: "inline-dossier",
+  "inline-dossier": "inline-dossier",
   unknown: "unknown",
 };
 
@@ -52,6 +57,8 @@ const TO_SOURCE_MODE: Record<string, SourceMode> = {
   "sectioned-text": "text_export",
   sectioned_text: "text_export",
   text_export: "text_export",
+  "inline-dossier": "inline_dossier",
+  inline_dossier: "inline_dossier",
 };
 
 export function parserFormatToDb(format: string): ReportFormatDb {

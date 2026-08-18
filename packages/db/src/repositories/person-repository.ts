@@ -10,6 +10,7 @@ import type {
   AddressCategory,
   ContactPointKind,
   DocumentType,
+  IncidentSeverity,
   Prisma,
   PrismaClient,
   RelationshipType,
@@ -190,6 +191,35 @@ function nameVariantCreates(
   return rows;
 }
 
+function riskScoreCreates(
+  draft: PersonDraft,
+): Prisma.RiskScoreCreateWithoutPersonInput[] {
+  return (draft.riskScores ?? []).map((rs) => ({
+    overall: rs.overall,
+    label: rs.label ?? null,
+    categories: toJson(rs.categories ?? []),
+    articles: toJson(rs.articles ?? []),
+    provenance: toJson(rs.provenance),
+  }));
+}
+
+function incidentCreates(
+  draft: PersonDraft,
+): Prisma.IncidentCreateWithoutPersonInput[] {
+  return (draft.incidents ?? []).map((inc) => ({
+    severity: inc.severity as IncidentSeverity,
+    title: inc.title ?? null,
+    body: inc.body != null ? toJson(inc.body) : undefined,
+    articleCode: inc.articleCode ?? null,
+    caseNumber: inc.caseNumber ?? null,
+    sentenceDate: inc.sentenceDate ?? null,
+    decision: inc.decision ?? null,
+    region: inc.region ?? null,
+    tags: inc.tags ?? [],
+    provenance: toJson(inc.provenance),
+  }));
+}
+
 function displayNameFromPerson(p: {
   canonicalFull: string | null;
   nameVariants: { full: string }[];
@@ -231,6 +261,8 @@ export function createPersonRepository(
         addresses: { create: addressCreates(parsed) },
         relationships: { create: relationshipCreates(parsed) },
         nameVariants: { create: nameVariantCreates(parsed) },
+        riskScores: { create: riskScoreCreates(parsed) },
+        incidents: { create: incidentCreates(parsed) },
         sourceReports: {
           create: {
             reportImportId: ctx.reportImportId,

@@ -11,6 +11,7 @@ import {
   IdentityTab,
   NetworkTab,
   OverviewTab,
+  RiskTab,
   SourcesTab,
 } from "@/components/contact-360-tabs";
 import {
@@ -154,6 +155,7 @@ export function Contact360({ personId }: { personId: string }) {
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="addresses">Addresses</TabsTrigger>
           <TabsTrigger value="network">Network</TabsTrigger>
+          <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="sources">Sources</TabsTrigger>
         </TabsList>
 
@@ -171,6 +173,9 @@ export function Contact360({ personId }: { personId: string }) {
         </TabsContent>
         <TabsContent value="network">
           <NetworkTab person={person} />
+        </TabsContent>
+        <TabsContent value="risk">
+          <RiskTab person={person} />
         </TabsContent>
         <TabsContent value="sources">
           <SourcesTab person={person} />

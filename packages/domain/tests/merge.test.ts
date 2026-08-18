@@ -23,6 +23,8 @@ function draft(partial: Partial<PersonDraft>): PersonDraft {
     documents: [],
     addresses: [],
     relationships: [],
+    riskScores: [],
+    incidents: [],
     ...partial,
   };
 }

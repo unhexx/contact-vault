@@ -106,8 +106,9 @@ export function ImportDropzone() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Import report</h1>
         <p className="text-sm text-muted-foreground">
-          Upload Void HTML or sectioned text dumps (.html / .htm / .txt). Detected
-          format, parse warnings, and merge suggestions appear after import.
+          Upload Void HTML, sectioned text, or inline-dossier scoring dumps
+          (.html / .htm / .txt). Detected format, parse warnings, and merge
+          suggestions appear after import.
         </p>
       </div>
 

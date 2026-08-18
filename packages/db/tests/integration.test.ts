@@ -12,6 +12,7 @@ import {
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CursorError } from "../src/cursor.js";
 import { DbError } from "../src/errors.js";
+import { normalizeSourceMode } from "../src/mappers/person-mapper.js";
 import {
   contentHashSynthetic,
   createTestCtx,
@@ -370,6 +371,8 @@ describe.skipIf(!hasDb)("db integration", () => {
         documents: [],
         addresses: [],
         relationships: [],
+        riskScores: [],
+        incidents: [],
       },
       {
         reportImportId: report.id,
@@ -749,11 +752,142 @@ describe.skipIf(!hasDb)("db integration", () => {
       "email",
     ]);
   });
+
+  it("createFromDraft + get360 round-trips riskScores and incidents", async () => {
+    const report = await ensureReportImport(ctx, { format: "inline_dossier" });
+    const p = prov(report.id, "scoring");
+    const draft = {
+      ...draftPerson({ reportId: report.id, name: SYNTH.nameA, phone: SYNTH.phoneA }),
+      riskScores: [
+        {
+          overall: 0.72,
+          label: "medium-high",
+          categories: [
+            { name: "criminal", flag: 1 as const },
+            { name: "finance", flag: 0 as const },
+          ],
+          articles: [
+            { code: "158", category: "theft", details: "synthetic case" },
+          ],
+          provenance: p,
+        },
+      ],
+      incidents: [
+        {
+          severity: "high" as const,
+          title: "Synthetic theft case",
+          body: { note: "fixture only" },
+          articleCode: "158 ч.2",
+          caseNumber: "1-000/2020",
+          sentenceDate: "2020-01-15",
+          decision: "convicted",
+          region: "77",
+          tags: ["theft"],
+          provenance: p,
+        },
+      ],
+    };
+
+    const created = await ctx.persons.createFromDraft(draft, {
+      reportImportId: report.id,
+      contentHash: report.contentHash,
+      query: "inline-dossier-q",
+      mode: "inline_dossier",
+    });
+
+    expect(created.riskScores).toHaveLength(1);
+    expect(created.riskScores[0]?.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    expect(created.riskScores[0]?.overall).toBe(0.72);
+    expect(created.riskScores[0]?.label).toBe("medium-high");
+    expect(created.riskScores[0]?.categories).toEqual([
+      { name: "criminal", flag: 1 },
+      { name: "finance", flag: 0 },
+    ]);
+    expect(created.riskScores[0]?.articles).toEqual([
+      { code: "158", category: "theft", details: "synthetic case" },
+    ]);
+    expect(created.riskScores[0]?.provenance.length).toBeGreaterThan(0);
+
+    expect(created.incidents).toHaveLength(1);
+    expect(created.incidents[0]?.id).toBeTruthy();
+    expect(created.incidents[0]?.severity).toBe("high");
+    expect(created.incidents[0]?.articleCode).toBe("158 ч.2");
+    expect(created.incidents[0]?.caseNumber).toBe("1-000/2020");
+    expect(created.incidents[0]?.body).toEqual({ note: "fixture only" });
+    expect(created.incidents[0]?.tags).toEqual(["theft"]);
+    expect(created.sourceReports[0]?.mode).toBe("inline_dossier");
+
+    const loaded = await ctx.persons.get360(created.id);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.riskScores).toHaveLength(1);
+    expect(loaded!.riskScores[0]?.id).toBe(created.riskScores[0]?.id);
+    expect(loaded!.riskScores[0]?.overall).toBe(0.72);
+    expect(loaded!.incidents).toHaveLength(1);
+    expect(loaded!.incidents[0]?.id).toBe(created.incidents[0]?.id);
+    expect(loaded!.incidents[0]?.severity).toBe("high");
+
+    // Soft-deleted risk/incident rows are excluded from get360
+    await ctx.prisma.riskScore.update({
+      where: { id: created.riskScores[0]!.id! },
+      data: { deletedAt: new Date() },
+    });
+    await ctx.prisma.incident.update({
+      where: { id: created.incidents[0]!.id! },
+      data: { deletedAt: new Date() },
+    });
+    const afterChildSoftDelete = await ctx.persons.get360(created.id);
+    expect(afterChildSoftDelete!.riskScores).toEqual([]);
+    expect(afterChildSoftDelete!.incidents).toEqual([]);
+  });
+
+  it("legacy person without risk/incident children maps empty arrays", async () => {
+    const report = await ensureReportImport(ctx);
+    const person = await ctx.persons.createFromDraft(
+      draftPerson({ reportId: report.id, name: SYNTH.nameA }),
+      {
+        reportImportId: report.id,
+        contentHash: report.contentHash,
+        query: "legacy",
+        mode: "void_html",
+      },
+    );
+    expect(person.riskScores).toEqual([]);
+    expect(person.incidents).toEqual([]);
+
+    const loaded = await ctx.persons.get360(person.id);
+    expect(loaded!.riskScores).toEqual([]);
+    expect(loaded!.incidents).toEqual([]);
+  });
+
+  it("createFromDraft normalizes inline-dossier hyphen mode to underscore", async () => {
+    const report = await ensureReportImport(ctx, { format: "inline_dossier" });
+    const person = await ctx.persons.createFromDraft(
+      draftPerson({ reportId: report.id, name: SYNTH.nameA }),
+      {
+        reportImportId: report.id,
+        contentHash: report.contentHash,
+        query: "hyphen-mode",
+        mode: "inline-dossier",
+      },
+    );
+    expect(person.sourceReports[0]?.mode).toBe("inline_dossier");
+  });
 });
 
 describe("db unit (no DB)", () => {
   it("skips integration suite when DATABASE_URL is unset (guard)", () => {
     // Documents the skipIf behavior for CI without Postgres
     expect(typeof hasDb).toBe("boolean");
+  });
+
+  it("normalizeSourceMode accepts inline_dossier underscore and hyphen alias", () => {
+    expect(normalizeSourceMode("inline_dossier")).toBe("inline_dossier");
+    expect(normalizeSourceMode("inline-dossier")).toBe("inline_dossier");
+    expect(normalizeSourceMode("void-html")).toBe("void_html");
+    expect(normalizeSourceMode("sectioned-text")).toBe("text_export");
+    expect(normalizeSourceMode(null)).toBeUndefined();
+    expect(normalizeSourceMode("unknown-mode-xyz")).toBe("other");
   });
 });

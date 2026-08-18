@@ -2,8 +2,10 @@ import { z } from "zod";
 import { AddressSchema } from "./address.js";
 import { ContactPointSchema } from "./contact-point.js";
 import { IdentityDocumentSchema } from "./identity-document.js";
+import { IncidentSchema } from "./incident.js";
 import { ProvenanceSchema } from "./provenance.js";
 import { RelationshipSchema } from "./relationship.js";
+import { RiskScoreSchema } from "./risk-score.js";
 
 export const NameVariantSchema = z.object({
   full: z.string().min(1),
@@ -31,6 +33,8 @@ const personFields = {
   documents: z.array(IdentityDocumentSchema).default([]),
   addresses: z.array(AddressSchema).default([]),
   relationships: z.array(RelationshipSchema).default([]),
+  riskScores: z.array(RiskScoreSchema).default([]),
+  incidents: z.array(IncidentSchema).default([]),
   extras: z.record(z.unknown()).optional(),
 } as const;
 

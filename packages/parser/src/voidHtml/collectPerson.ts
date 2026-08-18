@@ -389,6 +389,8 @@ export function collectPersonFromEmbed(
     documents,
     addresses,
     relationships,
+    riskScores: [],
+    incidents: [],
   };
   if (canonicalName) person.canonicalName = canonicalName;
   if (dateOfBirth) person.dateOfBirth = dateOfBirth;

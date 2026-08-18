@@ -4,6 +4,7 @@ import { z } from "zod";
 export const ReportFormatSchema = z.enum([
   "void-html",
   "sectioned-text",
+  "inline-dossier",
   "unknown",
 ]);
 

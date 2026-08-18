@@ -1,12 +1,14 @@
 /**
  * @contact-vault/parser
  *
- * Pure detectFormat + parseReport for void-html and sectioned-text (KD4, KD8).
+ * Pure detectFormat + parseReport for void-html, sectioned-text, and inline-dossier (KD4, KD8).
  * Depends only on @contact-vault/domain — no DB, no live /api/report poll.
+ * v0.1.1 supports inline-dossier.
  */
 
 import { contentHashOf } from "@contact-vault/domain";
 import { detectFormat } from "./detectFormat.js";
+import { parseInlineDossier } from "./inlineDossier/parse.js";
 import { parseSectionedText } from "./sectionedText/parse.js";
 import type { ParseReportInput, ParseResult, ReportFormat } from "./types.js";
 import { parseVoidHtml } from "./voidHtml/parse.js";
@@ -19,7 +21,19 @@ export type {
   ReportMeta,
 } from "./types.js";
 
-export { detectFormat } from "./detectFormat.js";
+export {
+  detectFormat,
+  SECTIONED_LINE_KV_RATIO,
+  DETECT_SAMPLE_WINDOW,
+  INLINE_IMYA_MIN_ALONE,
+  INLINE_IMYA_MIN_WITH_KEYS,
+  INLINE_KEY_MIN,
+  LINE_ORIENTED_KV_RE,
+  INLINE_MULTI_KEY_LINE_RE,
+  isSectionedTextClean,
+  isInlineDensity,
+  isInlineDossier,
+} from "./detectFormat.js";
 
 export {
   normalizePhone,
@@ -80,7 +94,7 @@ export function parseReport(input: ParseReportInput): ParseResult {
         {
           code: "UNKNOWN_FORMAT",
           message:
-            "Could not detect void-html or sectioned-text format (inline-dossier deferred)",
+            "Could not detect report format (void-html, sectioned-text, or inline-dossier required)",
           severity: "error",
         },
       ],
@@ -89,6 +103,26 @@ export function parseReport(input: ParseReportInput): ParseResult {
 
   if (format === "void-html") {
     const result = parseVoidHtml(content, { reportId, extractedAt: detectedAt });
+    return {
+      format,
+      reportMeta: {
+        contentHash,
+        reportQuery: result.reportQuery,
+        filename,
+        detectedAt,
+      },
+      persons: result.persons,
+      relationships: result.relationships,
+      warnings: result.warnings,
+    };
+  }
+
+  if (format === "inline-dossier") {
+    const result = parseInlineDossier(content, {
+      reportId,
+      extractedAt: detectedAt,
+    });
+    // result.persons[0].relationships is authoritative for createFromDraft (KD38)
     return {
       format,
       reportMeta: {

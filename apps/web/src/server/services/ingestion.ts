@@ -32,6 +32,10 @@ import { AppError } from "../errors.js";
 /** Max UTF-16 code units of content string (~15M chars). */
 export const MAX_IMPORT_CHARS = 15_000_000;
 
+/** Thrown when detectFormat returns unknown (lists all accepted formats). */
+export const UNKNOWN_FORMAT_MESSAGE =
+  "Could not detect report format (void-html, sectioned-text, or inline-dossier required)";
+
 const ALLOWED_FILENAME = /\.(html?|txt)$/i;
 
 export type ImportResult = {
@@ -140,6 +144,16 @@ async function buildDuplicateResult(
     orderBy: { createdAt: "asc" },
   });
 
+  const apiFormat = dbFormatToParser(format);
+  // Completed imports of supported formats only (no silent sectioned fallback)
+  if (apiFormat === "unknown") {
+    throw new AppError(
+      "INTERNAL",
+      `Unexpected format on completed import: ${format}`,
+      "UNEXPECTED_FORMAT",
+    );
+  }
+
   return {
     reportImportId,
     format: dbFormatToParser(format),
@@ -203,11 +217,7 @@ export async function importReport(
   });
 
   if (parsed.format === "unknown") {
-    throw new AppError(
-      "BAD_REQUEST",
-      "Could not detect report format (void-html or sectioned-text required)",
-      "UNKNOWN_FORMAT",
-    );
+    throw new AppError("BAD_REQUEST", UNKNOWN_FORMAT_MESSAGE, "UNKNOWN_FORMAT");
   }
 
   const hardErrors = parsed.warnings.filter((w) => w.severity === "error");
@@ -220,7 +230,7 @@ export async function importReport(
     );
   }
 
-  const apiFormat = parsed.format; // void-html | sectioned-text | unknown
+  const apiFormat = parsed.format;
   const dbFormat = parserFormatToDb(apiFormat);
   const mode = formatToSourceMode(apiFormat);
   const byteSize = Buffer.byteLength(input.content, "utf8");

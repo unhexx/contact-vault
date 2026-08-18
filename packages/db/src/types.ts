@@ -33,7 +33,7 @@ export type ListPersonsResult = {
  *
  * `mode` is stored on PersonSourceReport and mapped to domain Person.sourceReports[].mode.
  * Prefer domain mode strings: void_html | text_export | inline_dossier | telegram | fio | facesearch | other.
- * Aliases accepted on write: sectioned_text → text_export; void-html → void_html.
+ * Aliases accepted on write: sectioned_text → text_export; void-html → void_html; inline-dossier → inline_dossier.
  */
 export type CreateFromDraftContext = {
   reportImportId: string;
@@ -81,7 +81,11 @@ export type ListCursorPayload = {
   id: string;
 };
 
-export type ReportFormatDb = "void_html" | "sectioned_text" | "unknown";
+export type ReportFormatDb =
+  | "void_html"
+  | "sectioned_text"
+  | "inline_dossier"
+  | "unknown";
 export type ReportImportStatusDb =
   | "pending"
   | "parsed"

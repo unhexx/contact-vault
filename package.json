@@ -1,8 +1,8 @@
 {
   "name": "contact-vault",
   "private": true,
-  "version": "0.1.0",
-  "description": "Contact management platform with OSINT report ingestion (Void HTML + sectioned text)",
+  "version": "0.1.1",
+  "description": "Contact management platform with OSINT report ingestion (void-html, sectioned-text, inline-dossier)",
   "scripts": {
     "dev": "turbo run dev --filter=@contact-vault/web",
     "build": "turbo run build",

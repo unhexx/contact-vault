@@ -1,13 +1,14 @@
 # Report Mapping — Supported Ingestion Formats
 
-Contact Vault supports **two primary report formats** from the same family of OSINT aggregators:
+Contact Vault supports **three report formats** from the same family of OSINT aggregators:
 
 | Format ID | Description | Detection |
 |-----------|-------------|-----------|
 | `void-html` | Self-contained Void Search SPA HTML (embedded JSON) | `.html` + `__report_embed__` / SPA markers |
-| `sectioned-text` | Plain-text multi-source dump | Lines matching `=== ... ===` section headers |
+| `sectioned-text` | Plain-text multi-source dump | Clean `=== ... ===` section headers + line-oriented key-value |
+| `inline-dossier` | Inline key-value dossier with optional scoring header | Scoring markers (`Результаты скоринга` / `Общий показатель`), dense `Имя :` inline records, or `====Доходы====` / `====Адреса====` style blocks (after clean sectioned fails) |
 
-Both normalize into the same domain model (`Person` + children + `Provenance`).
+All three normalize into the same domain model (`Person` + children + `Provenance`). Scoring headers map to **RiskScore** / **Incident** (see [Inline-Dossier-Mapping.md](./Inline-Dossier-Mapping.md)).
 
 ---
 
@@ -160,18 +161,34 @@ Regardless of format:
 3. Attach all source section names to `Person.sourceReports`.
 4. Run merge-candidate detection against existing DB persons.
 
-## Parser package layout (target)
+## Format C — Inline dossier / scoring text (`inline-dossier`)
+
+Third format. Authoritative field map and detection rules: **[Inline-Dossier-Mapping.md](./Inline-Dossier-Mapping.md)**.
+
+Summary:
+
+- Free-text **scoring header** → `RiskScore` (overall, label, categories, articles) + optional `Incident` seeds
+- `====Доходы====` / `====Адреса====` blocks → financial/address facts (extras or Address[])
+- Dense **inline** `Key : Value` records with source label preceding `====` / `Имя :`
+- Prefer `sectioned-text` when the file is clean line-oriented `=== Source ===` + one-key-per-line
+
+Synthetic sample: `samples/inline-dossier/person-scoring-basic.txt`.
+
+---
+
+## Parser package layout
 
 ```
 packages/parser/
   src/
-    detectFormat.ts          // void-html | sectioned-text | unknown
+    detectFormat.ts          // void-html | sectioned-text | inline-dossier | unknown
     voidHtml/
     sectionedText/
       splitSections.ts
       parseRecord.ts
       keyAliases.ts
       mapToDomain.ts
+    inlineDossier/
     normalize/
       phone.ts
       name.ts

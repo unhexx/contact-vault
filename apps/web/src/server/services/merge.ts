@@ -41,6 +41,8 @@ type MergeChildren = {
   relationships: { id: string }[];
   nameVariants: { id: string }[];
   personSourceReports: SourceReportRow[];
+  riskScores: { id: string }[];
+  incidents: { id: string }[];
 };
 
 export type MergePersonsParams = {
@@ -70,6 +72,8 @@ type EntityCounts = {
   relationships: number;
   nameVariants: number;
   personSourceReports: number;
+  riskScores: number;
+  incidents: number;
 };
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -169,6 +173,8 @@ async function loadMergeChildren(
     relationships,
     nameVariants,
     personSourceReports,
+    riskScores,
+    incidents,
   ] = await Promise.all([
     db.contactPoint.findMany({
       where: { personId, deletedAt: null },
@@ -189,6 +195,14 @@ async function loadMergeChildren(
       select: { id: true },
     }),
     db.personSourceReport.findMany({ where: { personId } }),
+    db.riskScore.findMany({
+      where: { personId, deletedAt: null },
+      select: { id: true },
+    }),
+    db.incident.findMany({
+      where: { personId, deletedAt: null },
+      select: { id: true },
+    }),
   ]);
   return {
     contactPoints,
@@ -197,6 +211,8 @@ async function loadMergeChildren(
     relationships,
     nameVariants,
     personSourceReports,
+    riskScores,
+    incidents,
   };
 }
 
@@ -208,6 +224,8 @@ function countsFromChildren(kids: MergeChildren): EntityCounts {
     relationships: kids.relationships.length,
     nameVariants: kids.nameVariants.length,
     personSourceReports: kids.personSourceReports.length,
+    riskScores: kids.riskScores.length,
+    incidents: kids.incidents.length,
   };
 }
 
@@ -410,6 +428,8 @@ export async function mergePersons(
         relationships: [] as string[],
         nameVariants: [] as string[],
         personSourceReports: [] as string[],
+        riskScores: [] as string[],
+        incidents: [] as string[],
       };
       const skippedPersonSourceReportIds: string[] = [];
       const mergedIntoExisting: Array<{
@@ -538,6 +558,24 @@ export async function mergePersons(
           data: { personId: targetPersonId },
         });
         movedEntityIds.nameVariants.push(...nameIds);
+      }
+
+      const riskIds = sourceKids.riskScores.map((r) => r.id);
+      if (riskIds.length > 0) {
+        await tx.riskScore.updateMany({
+          where: { id: { in: riskIds } },
+          data: { personId: targetPersonId },
+        });
+        movedEntityIds.riskScores.push(...riskIds);
+      }
+
+      const incidentIds = sourceKids.incidents.map((r) => r.id);
+      if (incidentIds.length > 0) {
+        await tx.incident.updateMany({
+          where: { id: { in: incidentIds } },
+          data: { personId: targetPersonId },
+        });
+        movedEntityIds.incidents.push(...incidentIds);
       }
 
       const targetPsrByReport = new Set(

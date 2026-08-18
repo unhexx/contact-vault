@@ -5,6 +5,7 @@
  * - SKIP_DB_TESTS=1 → describe.skip (explicit opt-out)
  * - DB unreachable with default/set DATABASE_URL → beforeAll throws (no false green)
  */
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,9 +15,10 @@ import {
   createPrismaClient,
   type PrismaClient,
 } from "@contact-vault/db";
+import { contentHashOf } from "@contact-vault/domain";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { importReport } from "./ingestion.js";
+import { importReport, UNKNOWN_FORMAT_MESSAGE } from "./ingestion.js";
 import {
   dismissSuggestion,
   findNormKeyCollisions,
@@ -40,9 +42,26 @@ const fixtureHtml = path.join(
   repoRoot,
   "packages/parser/fixtures/void-html/person-basic.embed.html",
 );
+const fixtureInlineDossier = path.join(
+  repoRoot,
+  "packages/parser/fixtures/inline-dossier/person-scoring-basic.txt",
+);
 
 function load(p: string): string {
   return readFileSync(p, "utf8");
+}
+
+function synthProv(reportId: string) {
+  return [
+    {
+      reportId,
+      sourceName: "fixture",
+      section: "test",
+      originalKey: "k",
+      originalValue: "v",
+      extractedAt: new Date().toISOString(),
+    },
+  ];
 }
 
 describe.skipIf(skipDb)("ingestion + merge integration", () => {
@@ -246,12 +265,26 @@ Email: dismiss.other.${stamp}@example.com
 
   it("rejects unknown format without writing completed import", async () => {
     const content = `not a real report ${Date.now()}`;
+    const hash = contentHashOf(content);
     await expect(
       importReport(
         { prisma, storeRawReports: false },
         { filename: "junk.txt", content },
       ),
-    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      appCode: "UNKNOWN_FORMAT",
+      message: UNKNOWN_FORMAT_MESSAGE,
+    });
+    // Thrown message names all three formats (via shared constant used by importReport)
+    expect(UNKNOWN_FORMAT_MESSAGE).toMatch(/void-html/);
+    expect(UNKNOWN_FORMAT_MESSAGE).toMatch(/sectioned-text/);
+    expect(UNKNOWN_FORMAT_MESSAGE).toMatch(/inline-dossier/);
+    // No ReportImport row written for this content
+    const row = await prisma.reportImport.findUnique({
+      where: { contentHash: hash },
+    });
+    expect(row).toBeNull();
   });
 
   it("merge fills blank target Person scalars from source and keeps them on 360", async () => {
@@ -343,5 +376,288 @@ Email: dismiss.other.${stamp}@example.com
     expect(r.duplicate).toBe(false);
     expect(r.format).toBe("void-html");
     expect(r.personIds.length).toBe(1);
+  }, 60_000);
+
+  it("imports inline-dossier with riskScores, mode inline_dossier, idempotent", async () => {
+    const stamp = Date.now();
+    // Unique-ify phone so re-runs do not collide with prior persons on exact match
+    const content =
+      load(fixtureInlineDossier)
+        .replace(/\+7 900 000-00-01/g, `+7 900 ${String(stamp).slice(-7)}`)
+        .replace(/testov\.fake@example\.com/g, `testov.${stamp}@example.com`) +
+      `\n# test-run ${stamp}\n`;
+
+    const r1 = await importReport(
+      { prisma, storeRawReports: false },
+      { filename: "person-scoring-basic.txt", content },
+    );
+    expect(r1.duplicate).toBe(false);
+    expect(r1.format).toBe("inline-dossier");
+    expect(r1.personIds.length).toBeGreaterThanOrEqual(1);
+
+    const personId = r1.personIds[0]!;
+    const risks = await prisma.riskScore.findMany({
+      where: { personId, deletedAt: null },
+    });
+    expect(risks.length).toBeGreaterThanOrEqual(1);
+    expect(risks[0]!.overall).toBeCloseTo(0.8, 5);
+
+    // Scoring articles land on risk score; incident rows may also be created
+    expect(risks[0]!.articles).toBeTruthy();
+    const incidents = await prisma.incident.findMany({
+      where: { personId, deletedAt: null },
+    });
+    // Parser may map article lines to risk.articles and/or Incident — either is fine for ingestion
+    const articleBlob = JSON.stringify(risks[0]!.articles ?? []);
+    const hasArticle =
+      articleBlob.includes("228") ||
+      incidents.some((i) => (i.articleCode ?? i.title ?? "").includes("228"));
+    expect(hasArticle).toBe(true);
+
+    const psrs = await prisma.personSourceReport.findMany({
+      where: { personId },
+    });
+    expect(psrs.length).toBeGreaterThanOrEqual(1);
+    // KD31: write path always stores underscore form
+    expect(psrs.every((p) => p.mode === "inline_dossier")).toBe(true);
+
+    const report = await prisma.reportImport.findUnique({
+      where: { id: r1.reportImportId },
+    });
+    expect(report?.format).toBe("inline_dossier");
+
+    // contentHash idempotency
+    const rDup = await importReport(
+      { prisma, storeRawReports: false },
+      { filename: "person-scoring-basic.txt", content },
+    );
+    expect(rDup.duplicate).toBe(true);
+    expect(rDup.reportImportId).toBe(r1.reportImportId);
+    expect(rDup.format).toBe("inline-dossier");
+    expect(rDup.personIds).toEqual(r1.personIds);
+  }, 60_000);
+
+  it("merge always-moves riskScores + incidents (KD34); preview counts include them", async () => {
+    const stamp = Date.now();
+    const reportA = randomUUID();
+    const reportB = randomUUID();
+    const phone = `+7900${String(stamp).slice(-7)}`;
+
+    // Two ReportImports (required for PersonSourceReport FKs)
+    await prisma.reportImport.createMany({
+      data: [
+        {
+          id: reportA,
+          format: "inline_dossier",
+          status: "completed",
+          contentHash: `hash-a-${stamp}`,
+          filename: "a.txt",
+          completedAt: new Date(),
+        },
+        {
+          id: reportB,
+          format: "inline_dossier",
+          status: "completed",
+          contentHash: `hash-b-${stamp}`,
+          filename: "b.txt",
+          completedAt: new Date(),
+        },
+      ],
+    });
+
+    const target = await prisma.person.create({
+      data: {
+        canonicalFull: `Target ${stamp}`,
+        contactPoints: {
+          create: {
+            kind: "phone",
+            e164: phone,
+            raw: phone,
+            provenance: synthProv(reportA),
+          },
+        },
+        riskScores: {
+          create: [
+            {
+              overall: 0.1,
+              label: "target-low",
+              categories: [],
+              articles: [],
+              provenance: synthProv(reportA),
+            },
+          ],
+        },
+        incidents: {
+          create: [
+            {
+              severity: "low",
+              title: "target-inc",
+              articleCode: "T-1",
+              provenance: synthProv(reportA),
+            },
+          ],
+        },
+        sourceReports: {
+          create: {
+            reportImportId: reportA,
+            query: "",
+            contentHash: `hash-a-${stamp}`,
+            mode: "inline_dossier",
+          },
+        },
+      },
+    });
+
+    const source = await prisma.person.create({
+      data: {
+        canonicalFull: `Source ${stamp}`,
+        contactPoints: {
+          create: {
+            kind: "phone",
+            e164: phone,
+            raw: phone,
+            provenance: synthProv(reportB),
+          },
+        },
+        riskScores: {
+          create: [
+            {
+              overall: 0.9,
+              label: "source-high-1",
+              categories: [{ name: "fraud", flag: 1 }],
+              articles: [{ code: "159" }],
+              provenance: synthProv(reportB),
+            },
+            {
+              overall: 0.7,
+              label: "source-high-2",
+              categories: [],
+              articles: [],
+              provenance: synthProv(reportB),
+            },
+          ],
+        },
+        incidents: {
+          create: [
+            {
+              severity: "high",
+              title: "source-inc-1",
+              articleCode: "S-1",
+              provenance: synthProv(reportB),
+            },
+            {
+              severity: "medium",
+              title: "source-inc-2",
+              articleCode: "S-2",
+              provenance: synthProv(reportB),
+            },
+            {
+              severity: "low",
+              title: "source-inc-3",
+              articleCode: "S-3",
+              provenance: synthProv(reportB),
+            },
+          ],
+        },
+        sourceReports: {
+          create: {
+            reportImportId: reportB,
+            query: "",
+            contentHash: `hash-b-${stamp}`,
+            mode: "inline_dossier",
+          },
+        },
+      },
+    });
+
+    const sourceRiskIds = (
+      await prisma.riskScore.findMany({
+        where: { personId: source.id, deletedAt: null },
+        select: { id: true },
+      })
+    ).map((r) => r.id);
+    const sourceIncidentIds = (
+      await prisma.incident.findMany({
+        where: { personId: source.id, deletedAt: null },
+        select: { id: true },
+      })
+    ).map((r) => r.id);
+    expect(sourceRiskIds).toHaveLength(2);
+    expect(sourceIncidentIds).toHaveLength(3);
+
+    const suggestion = await prisma.mergeSuggestion.create({
+      data: {
+        reportImportId: reportB,
+        newPersonId: source.id,
+        targetPersonId: target.id,
+        matchedOn: [{ field: "phone", value: phone }],
+        status: "open",
+      },
+    });
+
+    const preview = await previewMerge(prisma, suggestion.id);
+    expect(preview.source.riskScores).toBe(2);
+    expect(preview.source.incidents).toBe(3);
+    expect(preview.target.riskScores).toBe(1);
+    expect(preview.target.incidents).toBe(1);
+
+    const merged = await mergePersons(prisma, {
+      sourcePersonId: source.id,
+      targetPersonId: target.id,
+      suggestionId: suggestion.id,
+    });
+    expect(merged.targetPersonId).toBe(target.id);
+
+    // Source soft-deleted
+    const sourceRow = await prisma.person.findUnique({
+      where: { id: source.id },
+    });
+    expect(sourceRow?.deletedAt).not.toBeNull();
+
+    // All source risk/incidents now on survivor (always-move, no dedupe)
+    const targetRisks = await prisma.riskScore.findMany({
+      where: { personId: target.id, deletedAt: null },
+    });
+    const targetIncidents = await prisma.incident.findMany({
+      where: { personId: target.id, deletedAt: null },
+    });
+    expect(targetRisks).toHaveLength(1 + 2); // target kept + source moved
+    expect(targetIncidents).toHaveLength(1 + 3);
+
+    for (const id of sourceRiskIds) {
+      expect(targetRisks.some((r) => r.id === id)).toBe(true);
+    }
+    for (const id of sourceIncidentIds) {
+      expect(targetIncidents.some((r) => r.id === id)).toBe(true);
+    }
+
+    // Source owns none
+    expect(
+      await prisma.riskScore.count({
+        where: { personId: source.id, deletedAt: null },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.incident.count({
+        where: { personId: source.id, deletedAt: null },
+      }),
+    ).toBe(0);
+
+    // Audit payload records moved ids
+    const audits = await prisma.auditLog.findMany({
+      where: { action: "merge", entityId: target.id },
+      orderBy: { createdAt: "desc" },
+      take: 1,
+    });
+    expect(audits.length).toBe(1);
+    const payload = audits[0]!.payload as {
+      movedEntityIds?: { riskScores?: string[]; incidents?: string[] };
+    };
+    expect(payload.movedEntityIds?.riskScores?.sort()).toEqual(
+      [...sourceRiskIds].sort(),
+    );
+    expect(payload.movedEntityIds?.incidents?.sort()).toEqual(
+      [...sourceIncidentIds].sort(),
+    );
   }, 60_000);
 });

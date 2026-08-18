@@ -35,7 +35,7 @@ LinkedIn auto-sync, outreach sequences, follow-up reminders, silent enrichment f
 
 Dual-format import (`void-html`, `sectioned-text`), Person 360, exact-match merge suggestions, persist-path dedup, extras-only name mapping.
 
-## Next release: v0.1.1 — third format + risk
+## Next release: v0.1.1 — third format + risk (this ship)
 
 **Goal:** Import an inline-dossier / scoring dump the same way as the two MVP formats, and show risk + incidents on Contact 360.
 

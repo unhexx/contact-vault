@@ -1,8 +1,9 @@
 /**
- * Local smoke import (PR8 release gate).
+ * Local smoke import (v0.1.1 release gate).
  *
- * Exercises dual-format import, re-import idempotency, merge accept path,
- * and soft-delete against Docker Postgres. No Playwright.
+ * Exercises three-format import (sectioned-text, void-html, inline-dossier),
+ * re-import idempotency, merge accept path, and soft-delete against Docker
+ * Postgres. No Playwright.
  *
  * Prerequisites:
  *   docker compose up -d
@@ -39,6 +40,10 @@ const samples = {
   voidHtml: path.join(
     repoRoot,
     "samples/void-html/person-basic.embed.html",
+  ),
+  inlineDossier: path.join(
+    repoRoot,
+    "samples/inline-dossier/person-scoring-basic.txt",
   ),
   variant: path.join(
     repoRoot,
@@ -120,7 +125,78 @@ async function main(): Promise<void> {
       `person=${r2.personIds[0]!.slice(0, 8)}… format=${r2.format}`,
     );
 
-    // --- 3. re-import same sectioned content → duplicate ---
+    // --- 3. inline-dossier import (scoring → riskScores + incidents on get360) ---
+    // Unique-ify all exact-match keys so this step does not collide with prior imports
+    // (phone/email/passport/SNILS/INN + related phone — avoids Merge Inbox noise).
+    const stamp = String(Date.now()).slice(-7);
+    const passSerial = stamp.slice(0, 6).padStart(6, "0");
+    const snilsBody = `${stamp.slice(0, 3)}-${stamp.slice(3, 6)}-${stamp.slice(0, 3)}`;
+    const inn = `9${stamp.padStart(11, "0")}`;
+    const inlineBase = load(samples.inlineDossier)
+      .replace(/\+7 900 000-00-01/g, `+7 900 ${stamp}`)
+      .replace(/\+7 900 000-00-02/g, `+7 901 ${stamp}`)
+      .replace(
+        /testov\.fake@example\.com/g,
+        `testov.smoke.${runId}@example.com`,
+      )
+      .replace(/00 00 000000/g, `99 99 ${passSerial}`)
+      .replace(/000-000-000 00/g, `${snilsBody} 00`)
+      .replace(/000000000000/g, inn);
+    const inlineContent = inlineBase + tag;
+    const rInline = await importReport(
+      { prisma, storeRawReports: false, dataRoot: repoRoot },
+      { filename: "person-scoring-basic.txt", content: inlineContent },
+    );
+    assert(
+      rInline.duplicate === false,
+      "inline-dossier import must not be duplicate",
+    );
+    assert(
+      rInline.format === "inline-dossier",
+      `expected inline-dossier, got ${rInline.format}`,
+    );
+    assert(
+      rInline.personIds.length >= 1,
+      "inline-dossier must create ≥1 person",
+    );
+    assert(
+      rInline.mergeSuggestions.length === 0,
+      `inline-dossier step must not exact-match prior persons (got ${rInline.mergeSuggestions.length} suggestion(s))`,
+    );
+    const personInline = rInline.personIds[0]!;
+    const viewInline = await personRepo.get360(personInline);
+    assert(viewInline, "get360 after inline-dossier import");
+    assert(
+      (viewInline.riskScores?.length ?? 0) >= 1,
+      "get360 must include riskScores when fixture has scoring",
+    );
+    const overall = viewInline.riskScores[0]!.overall;
+    assert(
+      typeof overall === "number" && Math.abs(overall - 0.8) < 1e-6,
+      `expected risk overall ≈ 0.8, got ${overall}`,
+    );
+    const riskLabel = viewInline.riskScores[0]!.label ?? "";
+    assert(
+      /плохо/i.test(riskLabel),
+      `expected risk label to contain «плохо», got ${JSON.stringify(riskLabel)}`,
+    );
+    assert(
+      (viewInline.incidents?.length ?? 0) >= 1,
+      "get360 must include incidents when fixture has scoring article lines",
+    );
+    const hasArticle228 = viewInline.incidents.some((i) =>
+      /228/.test(`${i.articleCode ?? ""}${i.title ?? ""}`),
+    );
+    assert(
+      hasArticle228,
+      "expected at least one incident with article code/title containing 228",
+    );
+    log(
+      "3 import inline-dossier",
+      `person=${personInline.slice(0, 8)}… format=${rInline.format} riskOverall=${overall} incidents=${viewInline.incidents.length}`,
+    );
+
+    // --- 4. re-import same sectioned content → duplicate ---
     const rDup = await importReport(
       { prisma, storeRawReports: false, dataRoot: repoRoot },
       { filename: "person-basic.txt", content: txtContent },
@@ -134,9 +210,9 @@ async function main(): Promise<void> {
       JSON.stringify(rDup.personIds) === JSON.stringify(r1.personIds),
       "duplicate personIds must match original",
     );
-    log("3 re-import idempotent", `reportImportId=${rDup.reportImportId.slice(0, 8)}…`);
+    log("4 re-import idempotent", `reportImportId=${rDup.reportImportId.slice(0, 8)}…`);
 
-    // --- 4. variant sharing phone → merge suggestion ---
+    // --- 5. variant sharing phone → merge suggestion ---
     const variantContent = load(samples.variant) + tag + `\n# variant\n`;
     const r3 = await importReport(
       { prisma, storeRawReports: false, dataRoot: repoRoot },
@@ -157,11 +233,11 @@ async function main(): Promise<void> {
     }
     const sug = targetsFirst[0]!;
     log(
-      "4 merge suggestion",
+      "5 merge suggestion",
       `id=${sug.id.slice(0, 8)}… matchedOn=${sug.matchedOn.map((m) => m.field).join(",")}`,
     );
 
-    // --- 5. accept merge → survivor Sources include both imports ---
+    // --- 6. accept merge → survivor Sources include both imports ---
     const sourcePsrsBefore = await prisma.personSourceReport.findMany({
       where: { personId: sug.newPersonId },
     });
@@ -205,18 +281,20 @@ async function main(): Promise<void> {
       "domain person sourceReports ≥ 2 after merge",
     );
     log(
-      "5 merge accept + Sources",
+      "6 merge accept + Sources",
       `survivor=${sug.targetPersonId.slice(0, 8)}… psr=${targetPsrs.length}`,
     );
 
-    // --- 6. soft-delete hides from get360 ---
+    // --- 7. soft-delete hides from get360 ---
     const toDelete = r2.personIds[0]!;
     await personRepo.softDelete(toDelete);
     const gone = await personRepo.get360(toDelete);
     assert(gone === null, "get360 must return null after soft-delete");
-    log("6 soft-delete", `person=${toDelete.slice(0, 8)}… hidden`);
+    log("7 soft-delete", `person=${toDelete.slice(0, 8)}… hidden`);
 
-    console.log("\nSMOKE PASS — dual import, re-import, merge Sources, soft-delete OK");
+    console.log(
+      "\nSMOKE PASS — three-format import, re-import, merge Sources, soft-delete OK",
+    );
   } catch (err) {
     failed = true;
     console.error(
