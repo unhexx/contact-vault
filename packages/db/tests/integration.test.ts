@@ -145,7 +145,7 @@ describe.skipIf(!hasDb)("db integration", () => {
       });
     }
 
-    const open = await ctx.merges.listOpen();
+    const open = await ctx.merges.list({ status: "open" });
     expect(open).toHaveLength(1);
     expect(open[0]?.newPersonId).toBe(personB.id);
     expect(open[0]?.targetPersonId).toBe(personA.id);
@@ -276,7 +276,7 @@ describe.skipIf(!hasDb)("db integration", () => {
     expect(afterList.items.map((i) => i.id)).toEqual([personB.id]);
 
     // Open suggestions involving A are dismissed
-    const open = await ctx.merges.listOpen();
+    const open = await ctx.merges.list({ status: "open" });
     expect(open).toHaveLength(0);
 
     const suggestion = await ctx.prisma.mergeSuggestion.findFirst({
@@ -556,7 +556,7 @@ describe.skipIf(!hasDb)("db integration", () => {
     expect(hits.map((h) => h.personId)).not.toContain(person.id);
   });
 
-  it("accept returns null when either party is soft-deleted", async () => {
+  it("list omits suggestions whose parties are soft-deleted without flipping status", async () => {
     const reportA = await ensureReportImport(ctx);
     const personA = await ctx.persons.createFromDraft(
       draftPerson({ reportId: reportA.id, phone: SYNTH.phoneA }),
@@ -584,15 +584,138 @@ describe.skipIf(!hasDb)("db integration", () => {
       matchedOn: [{ field: "phone", value: SYNTH.phoneA }],
     });
 
-    // Simulate race: party soft-deleted without dismiss path
     await ctx.prisma.person.update({
       where: { id: personA.id },
       data: { deletedAt: new Date() },
     });
 
-    expect(await ctx.merges.accept(suggestion.id)).toBeNull();
+    expect(await ctx.merges.list({ status: "open" })).toEqual([]);
     const row = await ctx.merges.findById(suggestion.id);
-    expect(row?.status).toBe("open"); // unchanged
+    expect(row?.status).toBe("open");
+  });
+
+  it("createFromDraft does not list the canonical name twice", async () => {
+    const report = await ensureReportImport(ctx);
+    const extra = "Вариантов Вариант Вариантович";
+    const person = await ctx.persons.createFromDraft(
+      {
+        ...draftPerson({ reportId: report.id, name: SYNTH.nameA }),
+        nameVariants: [
+          {
+            full: SYNTH.nameA,
+            last: SYNTH.nameA.split(" ")[0],
+            first: SYNTH.nameA.split(" ")[1],
+            provenance: prov(report.id),
+          },
+          {
+            full: extra,
+            last: "Вариантов",
+            first: "Вариант",
+            provenance: prov(report.id),
+          },
+        ],
+      },
+      {
+        reportImportId: report.id,
+        contentHash: report.contentHash,
+        query: "names",
+        mode: "void_html",
+      },
+    );
+
+    expect(person.canonicalName?.full).toBe(SYNTH.nameA);
+    expect(
+      person.nameVariants.some(
+        (nv) =>
+          nv.full === person.canonicalName?.full &&
+          (nv.last ?? undefined) === (person.canonicalName?.last ?? undefined) &&
+          (nv.first ?? undefined) === (person.canonicalName?.first ?? undefined) &&
+          (nv.middle ?? undefined) === (person.canonicalName?.middle ?? undefined),
+      ),
+    ).toBe(false);
+    expect(person.nameVariants.map((nv) => nv.full)).toContain(extra);
+    expect(person.nameVariants.map((nv) => nv.full)).not.toContain(SYNTH.nameA);
+
+    const listed = [
+      ...(person.canonicalName ? [person.canonicalName.full] : []),
+      ...person.nameVariants.map((nv) => nv.full),
+    ];
+    expect(listed.filter((n) => n === SYNTH.nameA)).toHaveLength(1);
+  });
+
+  it("createFromDraft dedupes duplicate documents and does not throw UNIQUE_VIOLATION", async () => {
+    const report = await ensureReportImport(ctx);
+    const p = prov(report.id);
+    const draft = draftPerson({
+      reportId: report.id,
+      name: SYNTH.nameA,
+      snils: SYNTH.snilsA,
+    });
+    draft.documents.push({
+      type: "snils",
+      number: SYNTH.snilsA.replace(/\s/g, ""),
+      issuedAt: "2010-01-01",
+      issuedBy: "ПФР",
+      provenance: p,
+    });
+
+    const person = await ctx.persons.createFromDraft(draft, {
+      reportImportId: report.id,
+      contentHash: report.contentHash,
+      query: "dup-doc",
+      mode: "void_html",
+    });
+
+    const snils = person.documents.filter((d) => d.type === "snils");
+    expect(snils).toHaveLength(1);
+    expect(snils[0]?.issuedAt).toBe("2010-01-01");
+    expect(snils[0]?.issuedBy).toBe("ПФР");
+    expect(snils[0]?.provenance.length).toBeGreaterThanOrEqual(2);
+
+    const rows = await ctx.prisma.identityDocument.findMany({
+      where: { personId: person.id, type: "snils" },
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("get360 includes report-import warnings on sourceReports", async () => {
+    const id = randomUUID();
+    const report = await ctx.reports.create({
+      id,
+      format: "void_html",
+      contentHash: contentHashSynthetic(id),
+      filename: "warn.html",
+      reportQuery: "warn",
+      status: "completed",
+      warnings: [
+        {
+          code: "UNKNOWN_KEY",
+          message: "Unknown profile key x",
+          section: "profile",
+          key: "x",
+          severity: "info",
+        },
+      ],
+    });
+    const created = await ctx.persons.createFromDraft(
+      draftPerson({ reportId: report.id, name: SYNTH.nameA, phone: SYNTH.phoneA }),
+      {
+        reportImportId: report.id,
+        contentHash: report.contentHash,
+        query: "warn",
+        mode: "void_html",
+      },
+    );
+    const view = await ctx.persons.get360(created.id);
+    expect(view?.sourceReports[0]?.warnings).toEqual([
+      {
+        code: "UNKNOWN_KEY",
+        message: "Unknown profile key x",
+        section: "profile",
+        key: "x",
+        severity: "info",
+      },
+    ]);
   });
 
   it("findByExactKeys re-normalizes display email and raw document numbers", async () => {

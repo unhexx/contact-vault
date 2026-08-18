@@ -5,11 +5,43 @@
  */
 import {
   Prisma,
+  createMergeSuggestionRepository,
   type MatchedOnField,
   type PrismaClient,
 } from "@contact-vault/db";
 
 import { AppError } from "../errors.js";
+
+type MergeDb = PrismaClient | Prisma.TransactionClient;
+
+type ContactPointRow = {
+  id: string;
+  kind: string;
+  e164: string | null;
+  emailNorm: string | null;
+  provenance: unknown;
+};
+
+type DocumentRow = {
+  id: string;
+  type: string;
+  numberNorm: string;
+  provenance: unknown;
+};
+
+type SourceReportRow = {
+  id: string;
+  reportImportId: string;
+};
+
+type MergeChildren = {
+  contactPoints: ContactPointRow[];
+  documents: DocumentRow[];
+  addresses: { id: string }[];
+  relationships: { id: string }[];
+  nameVariants: { id: string }[];
+  personSourceReports: SourceReportRow[];
+};
 
 export type MergePersonsParams = {
   sourcePersonId: string;
@@ -126,10 +158,10 @@ export function pickSurvivorScalars(
   };
 }
 
-async function countChildren(
-  prisma: PrismaClient,
+async function loadMergeChildren(
+  db: MergeDb,
   personId: string,
-): Promise<EntityCounts> {
+): Promise<MergeChildren> {
   const [
     contactPoints,
     documents,
@@ -138,20 +170,25 @@ async function countChildren(
     nameVariants,
     personSourceReports,
   ] = await Promise.all([
-    prisma.contactPoint.count({
+    db.contactPoint.findMany({
       where: { personId, deletedAt: null },
     }),
-    prisma.identityDocument.count({
+    db.identityDocument.findMany({
       where: { personId, deletedAt: null },
     }),
-    prisma.address.count({
+    db.address.findMany({
       where: { personId, deletedAt: null },
+      select: { id: true },
     }),
-    prisma.relationship.count({
+    db.relationship.findMany({
       where: { personId, deletedAt: null },
+      select: { id: true },
     }),
-    prisma.nameVariant.count({ where: { personId } }),
-    prisma.personSourceReport.count({ where: { personId } }),
+    db.nameVariant.findMany({
+      where: { personId },
+      select: { id: true },
+    }),
+    db.personSourceReport.findMany({ where: { personId } }),
   ]);
   return {
     contactPoints,
@@ -163,14 +200,22 @@ async function countChildren(
   };
 }
 
-/**
- * Norm-key collisions between source and target (phone e164 / emailNorm / type+numberNorm).
- */
-export async function findNormKeyCollisions(
-  prisma: PrismaClient,
-  sourcePersonId: string,
-  targetPersonId: string,
-): Promise<MatchedOnField[]> {
+function countsFromChildren(kids: MergeChildren): EntityCounts {
+  return {
+    contactPoints: kids.contactPoints.length,
+    documents: kids.documents.length,
+    addresses: kids.addresses.length,
+    relationships: kids.relationships.length,
+    nameVariants: kids.nameVariants.length,
+    personSourceReports: kids.personSourceReports.length,
+  };
+}
+
+/** Shared preview/execute policy: phone e164 / emailNorm / type+numberNorm. */
+export function collisionsFromChildren(
+  source: Pick<MergeChildren, "contactPoints" | "documents">,
+  target: Pick<MergeChildren, "contactPoints" | "documents">,
+): MatchedOnField[] {
   const collisions: MatchedOnField[] = [];
   const seen = new Set<string>();
 
@@ -181,85 +226,54 @@ export async function findNormKeyCollisions(
     collisions.push(hit);
   };
 
-  const [sourcePhones, targetPhones] = await Promise.all([
-    prisma.contactPoint.findMany({
-      where: {
-        personId: sourcePersonId,
-        kind: "phone",
-        deletedAt: null,
-        e164: { not: null },
-      },
-      select: { e164: true },
-    }),
-    prisma.contactPoint.findMany({
-      where: {
-        personId: targetPersonId,
-        kind: "phone",
-        deletedAt: null,
-        e164: { not: null },
-      },
-      select: { e164: true },
-    }),
-  ]);
-  const targetPhoneSet = new Set(
-    targetPhones.map((p) => p.e164).filter((v): v is string => Boolean(v)),
+  const targetPhones = new Set(
+    target.contactPoints
+      .filter((p) => p.kind === "phone" && p.e164)
+      .map((p) => p.e164 as string),
   );
-  for (const p of sourcePhones) {
-    if (p.e164 && targetPhoneSet.has(p.e164)) {
+  for (const p of source.contactPoints) {
+    if (p.kind === "phone" && p.e164 && targetPhones.has(p.e164)) {
       push({ field: "phone", value: p.e164 });
     }
   }
 
-  const [sourceEmails, targetEmails] = await Promise.all([
-    prisma.contactPoint.findMany({
-      where: {
-        personId: sourcePersonId,
-        kind: "email",
-        deletedAt: null,
-        emailNorm: { not: null },
-      },
-      select: { emailNorm: true },
-    }),
-    prisma.contactPoint.findMany({
-      where: {
-        personId: targetPersonId,
-        kind: "email",
-        deletedAt: null,
-        emailNorm: { not: null },
-      },
-      select: { emailNorm: true },
-    }),
-  ]);
-  const targetEmailSet = new Set(
-    targetEmails.map((e) => e.emailNorm).filter((v): v is string => Boolean(v)),
+  const targetEmails = new Set(
+    target.contactPoints
+      .filter((e) => e.kind === "email" && e.emailNorm)
+      .map((e) => e.emailNorm as string),
   );
-  for (const e of sourceEmails) {
-    if (e.emailNorm && targetEmailSet.has(e.emailNorm)) {
+  for (const e of source.contactPoints) {
+    if (e.kind === "email" && e.emailNorm && targetEmails.has(e.emailNorm)) {
       push({ field: "email", value: e.emailNorm });
     }
   }
 
-  const [sourceDocs, targetDocs] = await Promise.all([
-    prisma.identityDocument.findMany({
-      where: { personId: sourcePersonId, deletedAt: null },
-      select: { type: true, numberNorm: true },
-    }),
-    prisma.identityDocument.findMany({
-      where: { personId: targetPersonId, deletedAt: null },
-      select: { type: true, numberNorm: true },
-    }),
-  ]);
-  const targetDocSet = new Set(
-    targetDocs.map((d) => `${d.type}:${d.numberNorm}`),
+  const targetDocs = new Set(
+    target.documents.map((d) => `${d.type}:${d.numberNorm}`),
   );
-  for (const d of sourceDocs) {
+  for (const d of source.documents) {
     const fp = `${d.type}:${d.numberNorm}`;
-    if (targetDocSet.has(fp)) {
+    if (targetDocs.has(fp)) {
       push({ field: "document", value: fp });
     }
   }
 
   return collisions;
+}
+
+/**
+ * Norm-key collisions between source and target (phone e164 / emailNorm / type+numberNorm).
+ */
+export async function findNormKeyCollisions(
+  prisma: MergeDb,
+  sourcePersonId: string,
+  targetPersonId: string,
+): Promise<MatchedOnField[]> {
+  const [source, target] = await Promise.all([
+    loadMergeChildren(prisma, sourcePersonId),
+    loadMergeChildren(prisma, targetPersonId),
+  ]);
+  return collisionsFromChildren(source, target);
 }
 
 function asMatchedOn(value: unknown): MatchedOnField[] {
@@ -301,10 +315,9 @@ export async function previewMerge(
     );
   }
 
-  const [source, target, collisions] = await Promise.all([
-    countChildren(prisma, sourcePersonId),
-    countChildren(prisma, targetPersonId),
-    findNormKeyCollisions(prisma, sourcePersonId, targetPersonId),
+  const [sourceKids, targetKids] = await Promise.all([
+    loadMergeChildren(prisma, sourcePersonId),
+    loadMergeChildren(prisma, targetPersonId),
   ]);
 
   return {
@@ -312,9 +325,9 @@ export async function previewMerge(
     sourcePersonId,
     targetPersonId,
     matchedOn: asMatchedOn(suggestion.matchedOn),
-    source,
-    target,
-    collisions,
+    source: countsFromChildren(sourceKids),
+    target: countsFromChildren(targetKids),
+    collisions: collisionsFromChildren(sourceKids, targetKids),
   };
 }
 
@@ -405,169 +418,153 @@ export async function mergePersons(
         fromSourceEntityId: string;
       }> = [];
 
-      // --- ContactPoints: dedupe phone e164 / emailNorm ---
-      const sourceCps = await tx.contactPoint.findMany({
-        where: { personId: sourcePersonId, deletedAt: null },
-      });
-      for (const cp of sourceCps) {
-        let existingId: string | null = null;
-        if (cp.kind === "phone" && cp.e164) {
-          const hit = await tx.contactPoint.findFirst({
-            where: {
-              personId: targetPersonId,
-              kind: "phone",
-              e164: cp.e164,
-              deletedAt: null,
-            },
-            select: { id: true, provenance: true },
-          });
-          if (hit) {
-            await tx.contactPoint.update({
-              where: { id: hit.id },
-              data: {
-                provenance: mergeProvenance(hit.provenance, cp.provenance),
-              },
-            });
-            await tx.contactPoint.delete({ where: { id: cp.id } });
-            mergedIntoExisting.push({
-              entityType: "ContactPoint",
-              entityId: hit.id,
-              fromSourceEntityId: cp.id,
-            });
-            existingId = hit.id;
-          }
-        } else if (cp.kind === "email" && cp.emailNorm) {
-          const hit = await tx.contactPoint.findFirst({
-            where: {
-              personId: targetPersonId,
-              kind: "email",
-              emailNorm: cp.emailNorm,
-              deletedAt: null,
-            },
-            select: { id: true, provenance: true },
-          });
-          if (hit) {
-            await tx.contactPoint.update({
-              where: { id: hit.id },
-              data: {
-                provenance: mergeProvenance(hit.provenance, cp.provenance),
-              },
-            });
-            await tx.contactPoint.delete({ where: { id: cp.id } });
-            mergedIntoExisting.push({
-              entityType: "ContactPoint",
-              entityId: hit.id,
-              fromSourceEntityId: cp.id,
-            });
-            existingId = hit.id;
-          }
-        }
-        if (!existingId) {
-          await tx.contactPoint.update({
-            where: { id: cp.id },
-            data: { personId: targetPersonId },
-          });
-          movedEntityIds.contactPoints.push(cp.id);
+      const [sourceKids, targetKids] = await Promise.all([
+        loadMergeChildren(tx, sourcePersonId),
+        loadMergeChildren(tx, targetPersonId),
+      ]);
+
+      const targetPhoneByE164 = new Map<string, ContactPointRow>();
+      const targetEmailByNorm = new Map<string, ContactPointRow>();
+      for (const cp of targetKids.contactPoints) {
+        if (cp.kind === "phone" && cp.e164) targetPhoneByE164.set(cp.e164, cp);
+        if (cp.kind === "email" && cp.emailNorm) {
+          targetEmailByNorm.set(cp.emailNorm, cp);
         }
       }
 
-      // --- Documents: dedupe type + numberNorm ---
-      const sourceDocs = await tx.identityDocument.findMany({
-        where: { personId: sourcePersonId, deletedAt: null },
-      });
-      for (const doc of sourceDocs) {
-        const hit = await tx.identityDocument.findFirst({
-          where: {
-            personId: targetPersonId,
-            type: doc.type,
-            numberNorm: doc.numberNorm,
-            deletedAt: null,
-          },
-          select: { id: true, provenance: true },
-        });
+      const cpMoveIds: string[] = [];
+      const cpDeleteIds: string[] = [];
+      for (const cp of sourceKids.contactPoints) {
+        let hit: ContactPointRow | undefined;
+        if (cp.kind === "phone" && cp.e164) {
+          hit = targetPhoneByE164.get(cp.e164);
+        } else if (cp.kind === "email" && cp.emailNorm) {
+          hit = targetEmailByNorm.get(cp.emailNorm);
+        }
         if (hit) {
+          const provenance = mergeProvenance(hit.provenance, cp.provenance);
+          hit.provenance = provenance;
+          await tx.contactPoint.update({
+            where: { id: hit.id },
+            data: { provenance },
+          });
+          cpDeleteIds.push(cp.id);
+          mergedIntoExisting.push({
+            entityType: "ContactPoint",
+            entityId: hit.id,
+            fromSourceEntityId: cp.id,
+          });
+        } else {
+          cpMoveIds.push(cp.id);
+          if (cp.kind === "phone" && cp.e164) {
+            targetPhoneByE164.set(cp.e164, cp);
+          } else if (cp.kind === "email" && cp.emailNorm) {
+            targetEmailByNorm.set(cp.emailNorm, cp);
+          }
+        }
+      }
+      if (cpMoveIds.length > 0) {
+        await tx.contactPoint.updateMany({
+          where: { id: { in: cpMoveIds } },
+          data: { personId: targetPersonId },
+        });
+        movedEntityIds.contactPoints.push(...cpMoveIds);
+      }
+      if (cpDeleteIds.length > 0) {
+        await tx.contactPoint.deleteMany({ where: { id: { in: cpDeleteIds } } });
+      }
+
+      const targetDocByKey = new Map(
+        targetKids.documents.map((d) => [`${d.type}:${d.numberNorm}`, d]),
+      );
+      const docMoveIds: string[] = [];
+      const docDeleteIds: string[] = [];
+      for (const doc of sourceKids.documents) {
+        const key = `${doc.type}:${doc.numberNorm}`;
+        const hit = targetDocByKey.get(key);
+        if (hit) {
+          const provenance = mergeProvenance(hit.provenance, doc.provenance);
+          hit.provenance = provenance;
           await tx.identityDocument.update({
             where: { id: hit.id },
-            data: {
-              provenance: mergeProvenance(hit.provenance, doc.provenance),
-            },
+            data: { provenance },
           });
-          await tx.identityDocument.delete({ where: { id: doc.id } });
+          docDeleteIds.push(doc.id);
           mergedIntoExisting.push({
             entityType: "IdentityDocument",
             entityId: hit.id,
             fromSourceEntityId: doc.id,
           });
         } else {
-          await tx.identityDocument.update({
-            where: { id: doc.id },
-            data: { personId: targetPersonId },
-          });
-          movedEntityIds.documents.push(doc.id);
+          docMoveIds.push(doc.id);
+          targetDocByKey.set(key, doc);
         }
       }
-
-      // --- Addresses: always move ---
-      const sourceAddrs = await tx.address.findMany({
-        where: { personId: sourcePersonId, deletedAt: null },
-        select: { id: true },
-      });
-      for (const a of sourceAddrs) {
-        await tx.address.update({
-          where: { id: a.id },
+      if (docMoveIds.length > 0) {
+        await tx.identityDocument.updateMany({
+          where: { id: { in: docMoveIds } },
           data: { personId: targetPersonId },
         });
-        movedEntityIds.addresses.push(a.id);
+        movedEntityIds.documents.push(...docMoveIds);
+      }
+      if (docDeleteIds.length > 0) {
+        await tx.identityDocument.deleteMany({
+          where: { id: { in: docDeleteIds } },
+        });
       }
 
-      // --- Relationships: always move ---
-      const sourceRels = await tx.relationship.findMany({
-        where: { personId: sourcePersonId, deletedAt: null },
-        select: { id: true },
-      });
-      for (const r of sourceRels) {
-        await tx.relationship.update({
-          where: { id: r.id },
+      const addrIds = sourceKids.addresses.map((a) => a.id);
+      if (addrIds.length > 0) {
+        await tx.address.updateMany({
+          where: { id: { in: addrIds } },
           data: { personId: targetPersonId },
         });
-        movedEntityIds.relationships.push(r.id);
+        movedEntityIds.addresses.push(...addrIds);
       }
 
-      // --- NameVariants: always move ---
-      const sourceNames = await tx.nameVariant.findMany({
-        where: { personId: sourcePersonId },
-        select: { id: true },
-      });
-      for (const n of sourceNames) {
-        await tx.nameVariant.update({
-          where: { id: n.id },
+      const relIds = sourceKids.relationships.map((r) => r.id);
+      if (relIds.length > 0) {
+        await tx.relationship.updateMany({
+          where: { id: { in: relIds } },
           data: { personId: targetPersonId },
         });
-        movedEntityIds.nameVariants.push(n.id);
+        movedEntityIds.relationships.push(...relIds);
       }
 
-      // --- PersonSourceReport: move; unique conflict → drop source (KD22) ---
-      const sourcePsrs = await tx.personSourceReport.findMany({
-        where: { personId: sourcePersonId },
-      });
-      for (const psr of sourcePsrs) {
-        const targetHas = await tx.personSourceReport.findFirst({
-          where: {
-            personId: targetPersonId,
-            reportImportId: psr.reportImportId,
-          },
-          select: { id: true },
+      const nameIds = sourceKids.nameVariants.map((n) => n.id);
+      if (nameIds.length > 0) {
+        await tx.nameVariant.updateMany({
+          where: { id: { in: nameIds } },
+          data: { personId: targetPersonId },
         });
-        if (targetHas) {
-          await tx.personSourceReport.delete({ where: { id: psr.id } });
+        movedEntityIds.nameVariants.push(...nameIds);
+      }
+
+      const targetPsrByReport = new Set(
+        targetKids.personSourceReports.map((p) => p.reportImportId),
+      );
+      const psrMoveIds: string[] = [];
+      const psrDeleteIds: string[] = [];
+      for (const psr of sourceKids.personSourceReports) {
+        if (targetPsrByReport.has(psr.reportImportId)) {
+          psrDeleteIds.push(psr.id);
           skippedPersonSourceReportIds.push(psr.id);
         } else {
-          await tx.personSourceReport.update({
-            where: { id: psr.id },
-            data: { personId: targetPersonId },
-          });
-          movedEntityIds.personSourceReports.push(psr.id);
+          psrMoveIds.push(psr.id);
+          targetPsrByReport.add(psr.reportImportId);
         }
+      }
+      if (psrMoveIds.length > 0) {
+        await tx.personSourceReport.updateMany({
+          where: { id: { in: psrMoveIds } },
+          data: { personId: targetPersonId },
+        });
+        movedEntityIds.personSourceReports.push(...psrMoveIds);
+      }
+      if (psrDeleteIds.length > 0) {
+        await tx.personSourceReport.deleteMany({
+          where: { id: { in: psrDeleteIds } },
+        });
       }
 
       const now = new Date();
@@ -649,19 +646,15 @@ export async function dismissSuggestion(
   prisma: PrismaClient,
   suggestionId: string,
 ): Promise<{ ok: true }> {
-  const existing = await prisma.mergeSuggestion.findUnique({
-    where: { id: suggestionId },
-  });
+  const repo = createMergeSuggestionRepository(prisma);
+  const existing = await repo.findById(suggestionId);
   if (!existing) {
     throw new AppError("NOT_FOUND", "Merge suggestion not found");
   }
   if (existing.status !== "open") {
     throw new AppError("BAD_REQUEST", "Merge suggestion is not open");
   }
-  await prisma.mergeSuggestion.update({
-    where: { id: suggestionId },
-    data: { status: "dismissed", resolvedAt: new Date() },
-  });
+  await repo.setStatus(suggestionId, "dismissed");
   return { ok: true };
 }
 
@@ -683,25 +676,11 @@ export async function listSuggestions(
     resolvedAt: string | null;
   }>
 > {
-  const status = params.status ?? "open";
-  const rows = await prisma.mergeSuggestion.findMany({
-    where: {
-      status,
-      ...(params.personId
-        ? {
-            OR: [
-              { newPersonId: params.personId },
-              { targetPersonId: params.personId },
-            ],
-          }
-        : {}),
-      // Only suggestions where both parties are non-deleted when listing open;
-      // for historical statuses still hide soft-deleted parties for UI safety.
-      newPerson: { deletedAt: null },
-      targetPerson: { deletedAt: null },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
+  const repo = createMergeSuggestionRepository(prisma);
+  const rows = await repo.list({
+    personId: params.personId,
+    status: params.status ?? "open",
+    limit: 100,
   });
 
   return rows.map((s) => ({

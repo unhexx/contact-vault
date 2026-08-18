@@ -16,6 +16,13 @@ import type {
   PersonSourceReport,
   Relationship as DbRelationship,
 } from "@prisma/client";
+import { normalizeSourceMode } from "../format.js";
+
+export { normalizeSourceMode };
+
+export type PersonSourceReportWithImport = PersonSourceReport & {
+  reportImport?: { warnings: unknown } | null;
+};
 
 export type PersonWithChildren = DbPerson & {
   contactPoints: DbContactPoint[];
@@ -23,8 +30,12 @@ export type PersonWithChildren = DbPerson & {
   addresses: Address[];
   relationships: DbRelationship[];
   nameVariants: DbNameVariant[];
-  sourceReports: PersonSourceReport[];
+  sourceReports: PersonSourceReportWithImport[];
 };
+
+export type SourceWarning = NonNullable<
+  Person["sourceReports"][number]["warnings"]
+>[number];
 
 function asProvenanceArray(value: unknown): Provenance[] {
   if (!Array.isArray(value)) return [];
@@ -161,41 +172,38 @@ function mapNameVariant(nv: DbNameVariant): NameVariant {
   };
 }
 
-const SOURCE_MODES = [
-  "void_html",
-  "text_export",
-  "inline_dossier",
-  "telegram",
-  "fio",
-  "facesearch",
-  "other",
-] as const;
-
-type SourceMode = (typeof SOURCE_MODES)[number];
-
-/**
- * Normalize PersonSourceReport.mode to domain Person.sourceReports[].mode.
- * Accepts ReportFormat aliases (sectioned_text, void-html) so 360 Sources keep signal.
- */
-export function normalizeSourceMode(
-  mode: string | null | undefined,
-): SourceMode | undefined {
-  if (!mode) return undefined;
-  const aliases: Record<string, SourceMode> = {
-    sectioned_text: "text_export",
-    "sectioned-text": "text_export",
-    void_html: "void_html",
-    "void-html": "void_html",
-    text_export: "text_export",
-  };
-  if (mode in aliases) return aliases[mode];
-  return (SOURCE_MODES as readonly string[]).includes(mode)
-    ? (mode as SourceMode)
-    : "other";
+function sameNameParts(
+  a: { full: string; last?: string | null; first?: string | null; middle?: string | null },
+  b: { full: string; last?: string | null; first?: string | null; middle?: string | null },
+): boolean {
+  return (
+    a.full === b.full &&
+    (a.last ?? undefined) === (b.last ?? undefined) &&
+    (a.first ?? undefined) === (b.first ?? undefined) &&
+    (a.middle ?? undefined) === (b.middle ?? undefined)
+  );
 }
 
-function mapSourceMode(mode: string | null | undefined): SourceMode | undefined {
-  return normalizeSourceMode(mode);
+export function asSourceWarnings(value: unknown): SourceWarning[] {
+  if (!Array.isArray(value)) return [];
+  const out: SourceWarning[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const w = item as Record<string, unknown>;
+    if (typeof w.code !== "string" || typeof w.message !== "string") continue;
+    const severity =
+      w.severity === "error" || w.severity === "warn" || w.severity === "info"
+        ? w.severity
+        : "info";
+    out.push({
+      code: w.code,
+      message: w.message,
+      section: typeof w.section === "string" ? w.section : undefined,
+      key: typeof w.key === "string" ? w.key : undefined,
+      severity,
+    });
+  }
+  return out;
 }
 
 /**
@@ -207,12 +215,13 @@ export function toDomainPerson(row: PersonWithChildren): Person {
 
   // Prefer matching NameVariant row for provenance; fall back to first variant.
   const matchingVariant =
-    nameVariants.find(
-      (nv) =>
-        nv.full === row.canonicalFull &&
-        (nv.last ?? undefined) === (row.canonicalLast ?? undefined) &&
-        (nv.first ?? undefined) === (row.canonicalFirst ?? undefined) &&
-        (nv.middle ?? undefined) === (row.canonicalMiddle ?? undefined),
+    nameVariants.find((nv) =>
+      sameNameParts(nv, {
+        full: row.canonicalFull ?? "",
+        last: row.canonicalLast,
+        first: row.canonicalFirst,
+        middle: row.canonicalMiddle,
+      }),
     ) ?? nameVariants[0];
 
   // Never invent provenance with personId as reportId (wrong entity). Prefer variant
@@ -241,18 +250,16 @@ export function toDomainPerson(row: PersonWithChildren): Person {
         }
       : matchingVariant;
 
-  const variantsForDomain =
-    nameVariants.length > 0
-      ? nameVariants
-      : canonicalName
-        ? [canonicalName]
-        : [];
+  // nameVariants are extras only — never repeat the canonical match.
+  const extras = canonicalName
+    ? nameVariants.filter((nv) => !sameNameParts(nv, canonicalName))
+    : nameVariants;
 
   return {
     id: row.id,
     tempId: undefined,
     canonicalName,
-    nameVariants: variantsForDomain,
+    nameVariants: extras,
     dateOfBirth: row.dateOfBirth ?? undefined,
     placeOfBirth: row.placeOfBirth ?? undefined,
     gender:
@@ -283,7 +290,8 @@ export function toDomainPerson(row: PersonWithChildren): Person {
       query: sr.query,
       contentHash: sr.contentHash,
       importedAt: sr.importedAt.toISOString(),
-      mode: mapSourceMode(sr.mode),
+      mode: normalizeSourceMode(sr.mode),
+      warnings: asSourceWarnings(sr.reportImport?.warnings),
     })),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -298,5 +306,9 @@ export const personInclude = {
   addresses: { where: { deletedAt: null } },
   relationships: { where: { deletedAt: null } },
   nameVariants: true,
-  sourceReports: true,
+  sourceReports: {
+    include: {
+      reportImport: { select: { warnings: true } },
+    },
+  },
 } as const;

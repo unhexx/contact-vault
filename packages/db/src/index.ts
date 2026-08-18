@@ -20,10 +20,20 @@ export {
 export { DbError, isDbError, type DbErrorCode } from "./errors.js";
 
 export {
+  dbFormatToParser,
+  formatToSourceMode,
   normalizeSourceMode,
+  parserFormatToDb,
+  type ParserFormat,
+  type SourceMode,
+} from "./format.js";
+
+export {
+  asSourceWarnings,
   personInclude,
   toDomainPerson,
   type PersonWithChildren,
+  type SourceWarning,
 } from "./mappers/person-mapper.js";
 
 export { createPersonRepository } from "./repositories/person-repository.js";

@@ -3,15 +3,11 @@
  */
 import { z } from "zod";
 
+import { dbFormatToParser } from "@contact-vault/db";
+
 import { AppError } from "../../errors.js";
 import { importReport } from "../../services/ingestion.js";
 import { publicProcedure, router, wrap } from "../trpc.js";
-
-function dbFormatToApi(format: string): string {
-  if (format === "void_html") return "void-html";
-  if (format === "sectioned_text") return "sectioned-text";
-  return format;
-}
 
 export const reportsRouter = router({
   import: publicProcedure
@@ -43,7 +39,7 @@ export const reportsRouter = router({
         }
         return {
           id: row.id,
-          format: dbFormatToApi(row.format),
+          format: dbFormatToParser(row.format),
           status: row.status,
           filename: row.filename,
           contentHash: row.contentHash,

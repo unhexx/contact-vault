@@ -1,5 +1,5 @@
 /**
- * merge.* procedures — listSuggestions / preview / accept / dismiss / execute.
+ * merge.* procedures — listSuggestions / preview / accept / dismiss.
  * Accept always merges newPersonId → targetPersonId (KD18).
  * Dismiss = keep both (no separate keep_separate strategy).
  */
@@ -65,21 +65,5 @@ export const mergeRouter = router({
     .input(z.object({ suggestionId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       wrap(async () => dismissSuggestion(ctx.prisma, input.suggestionId)),
-    ),
-
-  execute: publicProcedure
-    .input(
-      z.object({
-        sourcePersonId: z.string().uuid(),
-        targetPersonId: z.string().uuid(),
-      }),
-    )
-    .mutation(({ ctx, input }) =>
-      wrap(async () =>
-        mergePersons(ctx.prisma, {
-          sourcePersonId: input.sourcePersonId,
-          targetPersonId: input.targetPersonId,
-        }),
-      ),
     ),
 });

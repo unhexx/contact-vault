@@ -15,8 +15,9 @@ import type {
   RelationshipType,
 } from "@prisma/client";
 import { CursorError, decodeListCursor, encodeListCursor } from "../cursor.js";
+import { dedupeContactPoints, dedupeDocuments } from "../dedupe-facts.js";
+import { normalizeSourceMode } from "../format.js";
 import {
-  normalizeSourceMode,
   personInclude,
   toDomainPerson,
   type PersonWithChildren,
@@ -60,7 +61,7 @@ function toJson(value: unknown): Prisma.InputJsonValue {
 function contactPointCreates(
   draft: PersonDraft,
 ): Prisma.ContactPointCreateWithoutPersonInput[] {
-  return draft.contactPoints.map((cp) => {
+  return dedupeContactPoints(draft.contactPoints).map((cp) => {
     const base = {
       provenance: toJson(cp.provenance),
       isPrimary: "isPrimary" in cp ? Boolean(cp.isPrimary) : false,
@@ -108,7 +109,7 @@ function contactPointCreates(
 function documentCreates(
   draft: PersonDraft,
 ): Prisma.IdentityDocumentCreateWithoutPersonInput[] {
-  return draft.documents.map((doc) => ({
+  return dedupeDocuments(draft.documents).map((doc) => ({
     type: doc.type as DocumentType,
     number: doc.number,
     numberNorm: normalizeDocumentNumber(doc.type, doc.number),

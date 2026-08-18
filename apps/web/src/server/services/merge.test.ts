@@ -4,7 +4,11 @@
 import { describe, expect, it } from "vitest";
 
 import { AppError } from "../errors.js";
-import { mergePersons, pickSurvivorScalars } from "./merge.js";
+import {
+  collisionsFromChildren,
+  mergePersons,
+  pickSurvivorScalars,
+} from "./merge.js";
 
 const blankScalars = {
   canonicalFull: null,
@@ -114,5 +118,53 @@ describe("pickSurvivorScalars", () => {
       { ...blankScalars, extras: { profile: { inn: "1" } } },
     );
     expect(merged.extras).toEqual({ profile: { inn: "1" } });
+  });
+});
+
+describe("collisionsFromChildren", () => {
+  it("detects phone / email / document norm-key overlaps", () => {
+    const collisions = collisionsFromChildren(
+      {
+        contactPoints: [
+          { id: "1", kind: "phone", e164: "+79990001122", emailNorm: null, provenance: [] },
+          { id: "2", kind: "email", e164: null, emailNorm: "a@example.com", provenance: [] },
+        ],
+        documents: [
+          { id: "3", type: "snils", numberNorm: "11223344595", provenance: [] },
+        ],
+      },
+      {
+        contactPoints: [
+          { id: "4", kind: "phone", e164: "+79990001122", emailNorm: null, provenance: [] },
+          { id: "5", kind: "email", e164: null, emailNorm: "a@example.com", provenance: [] },
+        ],
+        documents: [
+          { id: "6", type: "snils", numberNorm: "11223344595", provenance: [] },
+        ],
+      },
+    );
+    expect(collisions.map((c) => c.field).sort()).toEqual([
+      "document",
+      "email",
+      "phone",
+    ]);
+  });
+
+  it("ignores non-overlapping keys", () => {
+    const collisions = collisionsFromChildren(
+      {
+        contactPoints: [
+          { id: "1", kind: "phone", e164: "+79990001122", emailNorm: null, provenance: [] },
+        ],
+        documents: [],
+      },
+      {
+        contactPoints: [
+          { id: "2", kind: "phone", e164: "+79990003344", emailNorm: null, provenance: [] },
+        ],
+        documents: [],
+      },
+    );
+    expect(collisions).toEqual([]);
   });
 });

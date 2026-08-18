@@ -376,8 +376,7 @@ export function MergeSuggestionCard({
             <DialogTitle>Dismiss suggestion?</DialogTitle>
             <DialogDescription>
               Keep both contacts separate. This does not merge or delete either
-              person. You can still merge later via another suggestion or
-              execute path.
+              person. You can still merge later via another suggestion.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

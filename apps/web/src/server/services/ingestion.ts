@@ -17,10 +17,13 @@ import {
   createMergeSuggestionRepository,
   createPersonRepository,
   createReportImportRepository,
+  dbFormatToParser,
+  formatToSourceMode,
+  parserFormatToDb,
   Prisma,
   type MatchedOnField,
+  type ParserFormat,
   type PrismaClient,
-  type ReportFormatDb,
 } from "@contact-vault/db";
 import { parseReport, type ParseWarning } from "@contact-vault/parser";
 
@@ -33,7 +36,7 @@ const ALLOWED_FILENAME = /\.(html?|txt)$/i;
 
 export type ImportResult = {
   reportImportId: string;
-  format: "void-html" | "sectioned-text";
+  format: ParserFormat;
   contentHash: string;
   duplicate: boolean;
   warnings: ParseWarning[];
@@ -85,28 +88,6 @@ export function isContentHashUniqueViolation(err: unknown): boolean {
     );
   }
   return false;
-}
-
-function parserFormatToDb(
-  format: "void-html" | "sectioned-text",
-): ReportFormatDb {
-  return format === "void-html" ? "void_html" : "sectioned_text";
-}
-
-function dbFormatToApi(
-  format: string,
-): "void-html" | "sectioned-text" {
-  if (format === "void_html" || format === "void-html") return "void-html";
-  if (format === "sectioned_text" || format === "sectioned-text") {
-    return "sectioned-text";
-  }
-  // Should not reach for completed imports of supported formats
-  return "sectioned-text";
-}
-
-/** Source mode stored on PersonSourceReport (domain mode strings). */
-function modeFromFormat(format: "void-html" | "sectioned-text"): string {
-  return format === "void-html" ? "void_html" : "sectioned_text";
 }
 
 function asMatchedOn(value: unknown): MatchedOnField[] {
@@ -161,7 +142,7 @@ async function buildDuplicateResult(
 
   return {
     reportImportId,
-    format: dbFormatToApi(format),
+    format: dbFormatToParser(format),
     contentHash,
     duplicate: true,
     warnings: asWarnings(warnings),
@@ -204,8 +185,8 @@ export async function importReport(
       existing.warnings,
     );
   }
-  if (existing && existing.status !== "failed") {
-    // pending / parsed — another import in flight
+  if (existing) {
+    // pending / parsed / failed — never invent a new id for the same hash
     throw new AppError(
       "CONFLICT",
       "Import with this content hash is already in progress",
@@ -239,9 +220,9 @@ export async function importReport(
     );
   }
 
-  const apiFormat = parsed.format; // void-html | sectioned-text
+  const apiFormat = parsed.format; // void-html | sectioned-text | unknown
   const dbFormat = parserFormatToDb(apiFormat);
-  const mode = modeFromFormat(apiFormat);
+  const mode = formatToSourceMode(apiFormat);
   const byteSize = Buffer.byteLength(input.content, "utf8");
   const query = parsed.reportMeta.reportQuery ?? "";
 

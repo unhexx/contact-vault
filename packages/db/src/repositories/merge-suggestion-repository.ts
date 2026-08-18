@@ -10,6 +10,12 @@ export type MergeSuggestionRow = MergeSuggestion & {
   matchedOn: MatchedOnJson;
 };
 
+export type MergeSuggestionListParams = {
+  personId?: string;
+  status?: string;
+  limit?: number;
+};
+
 export type MergeSuggestionRepository = {
   create(
     input: CreateMergeSuggestionInput,
@@ -23,17 +29,13 @@ export type MergeSuggestionRepository = {
     inputs: CreateMergeSuggestionInput[],
     tx?: DbClient,
   ): Promise<MergeSuggestion[]>;
-  listOpen(params?: {
-    personId?: string;
-    limit?: number;
-  }): Promise<MergeSuggestion[]>;
-  dismiss(id: string, tx?: DbClient): Promise<MergeSuggestion | null>;
-  /**
-   * Accept only if still open and neither party is soft-deleted.
-   * Returns null when not open / missing / deleted parties (BAD_REQUEST at tRPC).
-   */
-  accept(id: string, tx?: DbClient): Promise<MergeSuggestion | null>;
   findById(id: string, tx?: DbClient): Promise<MergeSuggestion | null>;
+  list(params?: MergeSuggestionListParams): Promise<MergeSuggestion[]>;
+  setStatus(
+    id: string,
+    status: "open" | "accepted" | "dismissed",
+    tx?: DbClient,
+  ): Promise<MergeSuggestion>;
 };
 
 function assertNotSelf(input: CreateMergeSuggestionInput): void {
@@ -59,28 +61,6 @@ async function insertOne(
       status: "open",
     },
   });
-}
-
-/**
- * Reject accept when either person is soft-deleted (design merge.accept rule).
- * Returns false if either missing or deleted.
- */
-async function bothPersonsActive(
-  c: DbClient,
-  newPersonId: string,
-  targetPersonId: string,
-): Promise<boolean> {
-  const [a, b] = await Promise.all([
-    c.person.findFirst({
-      where: { id: newPersonId, deletedAt: null },
-      select: { id: true },
-    }),
-    c.person.findFirst({
-      where: { id: targetPersonId, deletedAt: null },
-      select: { id: true },
-    }),
-  ]);
-  return Boolean(a && b);
 }
 
 export function createMergeSuggestionRepository(
@@ -109,12 +89,17 @@ export function createMergeSuggestionRepository(
       return root.$transaction(async (inner) => run(inner));
     },
 
-    async listOpen(params) {
+    async findById(id, tx) {
+      const c = tx ?? root;
+      return c.mergeSuggestion.findUnique({ where: { id } });
+    },
+
+    async list(params) {
       const limit = params?.limit ?? 50;
       const personId = params?.personId;
       return root.mergeSuggestion.findMany({
         where: {
-          status: "open",
+          ...(params?.status ? { status: params.status } : {}),
           ...(personId
             ? {
                 OR: [{ newPersonId: personId }, { targetPersonId: personId }],
@@ -128,40 +113,15 @@ export function createMergeSuggestionRepository(
       });
     },
 
-    async dismiss(id, tx) {
+    async setStatus(id, status, tx) {
       const c = tx ?? root;
-      const existing = await c.mergeSuggestion.findUnique({ where: { id } });
-      if (!existing || existing.status !== "open") return null;
       return c.mergeSuggestion.update({
         where: { id },
-        data: { status: "dismissed", resolvedAt: new Date() },
+        data: {
+          status,
+          resolvedAt: status === "open" ? null : new Date(),
+        },
       });
-    },
-
-    async accept(id, tx) {
-      const c = tx ?? root;
-      const existing = await c.mergeSuggestion.findUnique({ where: { id } });
-      if (!existing || existing.status !== "open") return null;
-
-      const active = await bothPersonsActive(
-        c,
-        existing.newPersonId,
-        existing.targetPersonId,
-      );
-      if (!active) {
-        // Soft-deleted party — do not accept (design soft-delete table)
-        return null;
-      }
-
-      return c.mergeSuggestion.update({
-        where: { id },
-        data: { status: "accepted", resolvedAt: new Date() },
-      });
-    },
-
-    async findById(id, tx) {
-      const c = tx ?? root;
-      return c.mergeSuggestion.findUnique({ where: { id } });
     },
   };
 }
