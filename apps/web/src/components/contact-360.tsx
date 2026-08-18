@@ -13,6 +13,7 @@ import {
   OverviewTab,
   RiskTab,
   SourcesTab,
+  TimelineTab,
 } from "@/components/contact-360-tabs";
 import {
   MergeSuggestionCard,
@@ -42,6 +43,7 @@ export function Contact360({ personId }: { personId: string }) {
   const tab: Contact360Tab = isContact360Tab(tabParam) ? tabParam : "overview";
 
   const personQuery = trpc.contacts.get360.useQuery({ id: personId });
+  const timelineQuery = trpc.contacts.timeline.useQuery({ id: personId });
   const suggestionsQuery = trpc.merge.listSuggestions.useQuery({
     personId,
     status: "open",
@@ -157,6 +159,7 @@ export function Contact360({ personId }: { personId: string }) {
           <TabsTrigger value="network">Network</TabsTrigger>
           <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="sources">Sources</TabsTrigger>
+          <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
@@ -179,6 +182,16 @@ export function Contact360({ personId }: { personId: string }) {
         </TabsContent>
         <TabsContent value="sources">
           <SourcesTab person={person} />
+        </TabsContent>
+        <TabsContent value="timeline">
+          {timelineQuery.isLoading ? (
+            <Skeleton className="h-48 w-full" />
+          ) : (
+            <TimelineTab
+              events={timelineQuery.data ?? []}
+              error={timelineQuery.error?.message}
+            />
+          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -213,7 +226,7 @@ function MergeSuggestionsPanel({
       </div>
       <p className="text-xs text-muted-foreground">
         Accept merges new → target (survivor). Dismiss keeps both. After accept,
-        review Sources on the survivor to confirm imports from both persons.
+        review Timeline on the survivor to confirm imports from both persons.
       </p>
       {isLoading ? (
         <Skeleton className="h-32 w-full" />
@@ -225,7 +238,7 @@ function MergeSuggestionsPanel({
                 suggestion={s}
                 acceptNavigateTo={
                   s.targetPersonId === personId
-                    ? `/contacts/${personId}?tab=sources`
+                    ? `/contacts/${personId}?tab=timeline`
                     : undefined
                 }
               />

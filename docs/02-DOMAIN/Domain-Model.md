@@ -255,6 +255,7 @@ Supporting types (`Employment`, `FinancialFact`, `TravelRecord`, `BankRelation`,
 - A Person should have at least one strong identifier (phone, email, passport, or high-confidence Name+DOB).
 - Matching rules produce `MergeSuggestion` only. Exact keys: phone e164 / emailNorm / document type+numberNorm. Name+DOB: `isLikelySamePerson` on canonical/variants **and** compatible partial DOB (equal or hyphen-boundary prefix). Missing DOB or conflicting full dates do not suggest. Never silent merge.
 - Merge is an explicit domain command that produces an audit event; it never happens silently.
+- Person 360 **import timeline** is append-only: `PersonSourceReport` / ReportImport rows plus `audit_log` for that Person (`import` via source link, `merge` / `dismiss` / `soft_delete`). Newest first. Do not collapse or rewrite history.
 - Soft-delete only; hard delete is a privileged, logged operation.
 - Confidence scores are informational; UI must always show sources.
 - Criminal / scoring data is first-class (RiskScore + Incident), not free-text notes.

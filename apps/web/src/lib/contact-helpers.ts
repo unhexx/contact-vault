@@ -63,6 +63,7 @@ export const CONTACT_360_TABS = [
   "network",
   "risk",
   "sources",
+  "timeline",
 ] as const;
 
 export type Contact360Tab = (typeof CONTACT_360_TABS)[number];
@@ -118,6 +119,38 @@ export function pickHighestRiskScore<T extends { overall: number }>(
     if (next.overall > best.overall) best = next;
   }
   return best;
+}
+
+/** Badge variant for person-timeline actions. */
+export function timelineActionVariant(
+  action: string,
+): "default" | "secondary" | "outline" | "destructive" {
+  switch (action) {
+    case "merge":
+      return "default";
+    case "dismiss":
+      return "outline";
+    case "soft_delete":
+      return "destructive";
+    case "import":
+    default:
+      return "secondary";
+  }
+}
+
+export function timelineActionLabel(action: string): string {
+  switch (action) {
+    case "import":
+      return "Import";
+    case "merge":
+      return "Merge";
+    case "dismiss":
+      return "Dismiss";
+    case "soft_delete":
+      return "Soft-delete";
+    default:
+      return action;
+  }
 }
 
 /** Badge variant for incident severity. */

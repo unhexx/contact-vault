@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, type ReactNode } from "react";
-import type { Person } from "@contact-vault/domain";
+import type { Person, TimelineEvent } from "@contact-vault/domain";
 
 import { CopyField } from "@/components/copy-field";
 import { SourceBadge } from "@/components/source-badge";
@@ -26,6 +26,8 @@ import {
   primaryEmails,
   primaryPhones,
   riskOverallTone,
+  timelineActionLabel,
+  timelineActionVariant,
 } from "@/lib/contact-helpers";
 import { cn, formatDisplayDate } from "@/lib/utils";
 
@@ -850,6 +852,75 @@ export function SourcesTab({ person }: { person: Person }) {
             );
           })}
         </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function TimelineTab({
+  events,
+  error,
+}: {
+  events: TimelineEvent[];
+  error?: string;
+}) {
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <p className="text-sm text-destructive">{error}</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (events.length === 0) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <EmptyHint>No import or audit events</EmptyHint>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Import timeline</CardTitle>
+        <CardDescription>
+          Append-only import and audit chain, newest first
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ol className="space-y-3">
+          {events.map((event) => (
+            <li key={event.id} className="rounded-lg border p-3 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={timelineActionVariant(event.action)}>
+                  {timelineActionLabel(event.action)}
+                </Badge>
+                <span className="text-muted-foreground">{event.actor}</span>
+                <span className="text-muted-foreground">
+                  {formatDisplayDate(event.at)}
+                </span>
+                {event.format ? (
+                  <Badge variant="outline">{event.format}</Badge>
+                ) : null}
+              </div>
+              {event.contentHash ? (
+                <div className="mt-2 font-mono text-xs">
+                  contentHash:{" "}
+                  <CopyField
+                    value={event.contentHash}
+                    label="Content hash"
+                    mono
+                  />
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ol>
       </CardContent>
     </Card>
   );

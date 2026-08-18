@@ -56,6 +56,15 @@ export {
   type ReportFormat,
 } from "./report-import.js";
 
+// Person import / audit timeline
+export {
+  TimelineEventSchema,
+  mergePersonTimeline,
+  type TimelineAuditInput,
+  type TimelineEvent,
+  type TimelineImportInput,
+} from "./timeline.js";
+
 // FIO / likely-same (parser + name+DOB matching)
 export {
   fioEquals,

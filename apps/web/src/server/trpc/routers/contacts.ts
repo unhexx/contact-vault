@@ -1,9 +1,10 @@
 /**
- * contacts.* procedures — list / get360 / softDelete.
+ * contacts.* procedures — list / get360 / timeline / softDelete.
  */
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
+import { listPersonTimeline } from "../../services/timeline.js";
 import { publicProcedure, router, wrap } from "../trpc.js";
 
 export const contactsRouter = router({
@@ -41,6 +42,17 @@ export const contactsRouter = router({
         }
         return person;
       }),
+    ),
+
+  timeline: publicProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        limit: z.number().int().min(1).max(200).default(100),
+      }),
+    )
+    .query(({ ctx, input }) =>
+      wrap(async () => listPersonTimeline(ctx.prisma, input.id, input.limit)),
     ),
 
   softDelete: publicProcedure

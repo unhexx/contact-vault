@@ -5,6 +5,7 @@
  */
 import {
   Prisma,
+  createAuditLogRepository,
   createMergeSuggestionRepository,
   type MatchedOnField,
   type PrismaClient,
@@ -692,7 +693,33 @@ export async function dismissSuggestion(
   if (existing.status !== "open") {
     throw new AppError("BAD_REQUEST", "Merge suggestion is not open");
   }
-  await repo.setStatus(suggestionId, "dismissed");
+  const auditRepo = createAuditLogRepository(prisma);
+  const payload = {
+    suggestionId,
+    newPersonId: existing.newPersonId,
+    targetPersonId: existing.targetPersonId,
+  };
+  await prisma.$transaction(async (tx) => {
+    await repo.setStatus(suggestionId, "dismissed", tx);
+    await auditRepo.append(
+      {
+        action: "dismiss",
+        entityType: "Person",
+        entityId: existing.newPersonId,
+        payload,
+      },
+      tx,
+    );
+    await auditRepo.append(
+      {
+        action: "dismiss",
+        entityType: "Person",
+        entityId: existing.targetPersonId,
+        payload,
+      },
+      tx,
+    );
+  });
   return { ok: true };
 }
 

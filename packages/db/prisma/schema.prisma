@@ -294,7 +294,7 @@ model MergeSuggestion {
 
 model AuditLog {
   id         String   @id @default(uuid()) @db.Uuid
-  action     String // merge | soft_delete | import  (unmerge reserved for v0.2)
+  action     String // import | merge | dismiss | soft_delete  (unmerge reserved)
   actor      String   @default("local")
   entityType String
   entityId   String

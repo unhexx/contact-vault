@@ -57,8 +57,8 @@ type MergeSuggestionCardProps = {
   /** Deep-link highlight from import /merge?suggestionId= */
   highlighted?: boolean;
   /**
-   * When set, Accept navigates here instead of the default target Sources tab.
-   * Default: `/contacts/{targetPersonId}?tab=sources`
+   * When set, Accept navigates here instead of the default target Timeline tab.
+   * Default: `/contacts/{targetPersonId}?tab=timeline`
    */
   acceptNavigateTo?: string;
   className?: string;
@@ -102,10 +102,11 @@ export function MergeSuggestionCard({
         utils.merge.listSuggestions.invalidate(),
         utils.contacts.list.invalidate(),
         utils.contacts.get360.invalidate(),
+        utils.contacts.timeline.invalidate(),
       ]);
       const dest =
         acceptNavigateTo ??
-        `/contacts/${data.targetPersonId}?tab=sources`;
+        `/contacts/${data.targetPersonId}?tab=timeline`;
       router.push(dest);
     },
     onError: (err) => {
@@ -128,6 +129,7 @@ export function MergeSuggestionCard({
         utils.merge.listSuggestions.invalidate(),
         utils.contacts.list.invalidate(),
         utils.contacts.get360.invalidate(),
+        utils.contacts.timeline.invalidate(),
       ]);
     },
     onError: (err) => {
@@ -344,7 +346,7 @@ export function MergeSuggestionCard({
                   </p>
                 ) : null}
                 <p>
-                  After accept you will open the target contact Sources tab to
+                  After accept you will open the target contact Timeline tab to
                   verify imports from both persons.
                 </p>
               </div>

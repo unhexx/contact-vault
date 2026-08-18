@@ -261,6 +261,23 @@ Email: dismiss.other.${stamp}@example.com
     });
     expect(pNew).not.toBeNull();
     expect(pTarget).not.toBeNull();
+
+    const dismissNew = await prisma.auditLog.findMany({
+      where: {
+        action: "dismiss",
+        entityType: "Person",
+        entityId: sug.newPersonId,
+      },
+    });
+    const dismissTarget = await prisma.auditLog.findMany({
+      where: {
+        action: "dismiss",
+        entityType: "Person",
+        entityId: sug.targetPersonId,
+      },
+    });
+    expect(dismissNew).toHaveLength(1);
+    expect(dismissTarget).toHaveLength(1);
   }, 60_000);
 
   it("rejects unknown format without writing completed import", async () => {

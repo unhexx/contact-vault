@@ -125,7 +125,7 @@ export type CreateMergeSuggestionInput = {
 };
 
 export type CreateAuditLogInput = {
-  action: "import" | "merge" | "soft_delete" | string;
+  action: "import" | "merge" | "dismiss" | "soft_delete" | string;
   entityType: string;
   entityId: string;
   payload?: unknown;

@@ -9,16 +9,27 @@ import {
   pickHighestRiskScore,
   riskOverallTone,
   roundRiskOverall,
+  timelineActionLabel,
+  timelineActionVariant,
 } from "./contact-helpers.js";
 
 describe("contact-helpers", () => {
-  it("recognizes Contact 360 tabs including risk", () => {
+  it("recognizes Contact 360 tabs including risk and timeline", () => {
     expect(CONTACT_360_TABS).toContain("risk");
+    expect(CONTACT_360_TABS).toContain("timeline");
     for (const tab of CONTACT_360_TABS) {
       expect(isContact360Tab(tab)).toBe(true);
     }
     expect(isContact360Tab("vehicles")).toBe(false);
     expect(isContact360Tab(null)).toBe(false);
+  });
+
+  it("labels timeline actions", () => {
+    expect(timelineActionLabel("import")).toBe("Import");
+    expect(timelineActionLabel("merge")).toBe("Merge");
+    expect(timelineActionLabel("dismiss")).toBe("Dismiss");
+    expect(timelineActionVariant("merge")).toBe("default");
+    expect(timelineActionVariant("soft_delete")).toBe("destructive");
   });
 
   it("labels Russian document types", () => {
