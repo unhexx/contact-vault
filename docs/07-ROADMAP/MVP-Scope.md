@@ -31,11 +31,11 @@ Full vehicle photo pipelines, full financials/flights dedicated tabs, advanced f
 
 ---
 
-v0.1.0 is **shipped**. v0.1.1, v0.2.0, and later versions live in [Roadmap.md](./Roadmap.md).
+v0.1.0 is **shipped**. v0.1.1, v0.2.0, v0.3.0, and later versions live in [Roadmap.md](./Roadmap.md).
 
 ## v0.3 note
 
-Research (see Roadmap) changed the original vehicles-first sketch. **Bank relations** are the first v0.3 increment because PRD G1 already required mapping Void `banks`, and the embed fixture already has them. Vehicles and employment/financials follow as later v0.3.x slices. Vehicle **photo** pipelines remain out of scope.
+Research (see Roadmap) changed the original vehicles-first sketch. **Bank relations** shipped first (PRD G1 / Void `banks`), then Vehicles (**Assets**) and Employment / FinancialFact (**Work**). Vehicle **photo** pipelines remain out of scope.
 
 ## Checklist (v0.1.0)
 

@@ -1,6 +1,6 @@
 # Contact Vault Roadmap
 
-Living plan after **v0.2.0**. Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
+Living plan after **v0.3.0**. Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
 
 ## Research notes (2026-08-18)
 
@@ -52,35 +52,11 @@ List search already matches `canonicalFull` / `nameVariants`, phone `e164`, `ema
 
 Fuzzy name + compatible partial-DOB merge *suggestions* (no silent merge); Contact 360 **Timeline** (append-only import + audit events); JSContact Card export of identity + contact points (RFC 9553 / RFC 9982 `version: "2.0"`, `uid` = Person id). Extras colliding with reserved Card keys are vendor-prefixed `contact-vault.local:`. Social/messenger points are not exported.
 
-## Next release: v0.3 — rest of the dossier facts
+### v0.3.0 — rest of the dossier facts
 
-### Research notes (2026-08-18, v0.3)
+BankRelation from void-html `data.banks` + Contact 360 **Banks** (name required; account*/bik optional; unknown keys extras; no bank-name matching). Vehicle from `vehicles` / `autoregs` + **Assets** (plate|vin|brand|model required; no photos). Employment + FinancialFact (void-html `work`/`companies`/`finance`; promote inline-dossier `====Доходы====`) + **Work**. Persist + merge always-moves those children. JSContact still does not export banks / vehicles / employments / financialFacts.
 
-Contact Vault is still a **provenance-first dossier vault**, not an outreach CRM. v0.3 promotes facts that already appear in Void embeds / inline-dossier extras but are not first-class children.
-
-CDD / FATF Rec. 10 / FinCEN CDD order after identity is already shipped: understand the **nature and purpose of customer relationships** (account / product type), then source-of-wealth assets. That is not a networking-CRM “assets tab first” sketch.
-
-| Priority | Slice | Why this order |
-|----------|--------|----------------|
-| 1 | **Bank relations** | PRD **G1** lists banks with profile / addresses / socials / documents. The void-html fixture already embeds `data.banks`; the parser used to emit `UNMAPPED_SECTION`. Bank name + optional account hint / BIK is a sourced fact, not a note. |
-| 2 | Vehicles | Domain-Model already specifies `Vehicle`. PRD 360 names Assets (vehicles). Collect `vehicles` / `autoregs` only when the embed has them. Photo / lightbox pipelines stay later (MVP-Scope out). |
-| 3 | Employment / financial facts | Occupation and income are CDD-relevant, but current fixtures store `====Доходы====` as extras-only lean rows. Promote after banks/vehicles have tables so we do not invent a second extras-shaped type. |
-
-**Modeling rules (same as Risk / Incident):**
-
-- First-class Person child; provenance mandatory.
-- Merge **always-moves** children (no silent drop, no bank-name dedupe).
-- Preserve unknown bank keys in `extras` / parse warnings.
-- Do **not** open merge suggestions on bank name alone (common brands, no identity).
-- JSContact export stays identity + phones/emails. Banks / vehicles are out of RFC 9553 Card.
-
-**Skip this release:** vehicle photo lightbox, payment-card PAN as a searchable identity, bank-name matching, employment graph.
-
-### v0.3.x slices
-
-- [x] BankRelation domain + void-html `data.banks` collector + persist + Contact 360 **Banks** tab (first increment).
-- [x] Vehicles first-class + void-html `vehicles` / `autoregs` collector + 360 Assets tab (no photo pipeline).
-- [x] Employment / FinancialFact promotion from extras + 360 Work tab.
+CDD / FATF Rec. 10 order after identity: bank relations first (PRD G1), then vehicles, then employment / income. Vehicle photo/lightbox, payment-card PAN as a searchable identity, bank-name matching, and employment graph stayed out.
 
 ## Later
 

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.2.0" src="https://img.shields.io/badge/version-0.2.0-0ea5e9?style=flat-square" />
+  <img alt="Version 0.3.0" src="https://img.shields.io/badge/version-0.3.0-0ea5e9?style=flat-square" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" />
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-000000?style=flat-square&logo=nextdotjs&logoColor=white" />
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" />
@@ -15,7 +15,7 @@
 
 **Contact management platform with OSINT report ingestion (void-html, sectioned-text, inline-dossier).**
 
-Version **0.2.0** — three-format import, Person 360 with provenance, Risk, and Timeline, merge *suggestions* (exact phone/email/document or name + compatible partial DOB; no silent auto-merge), JSContact Card export.
+Version **0.3.0** — three-format import, Person 360 with provenance, Risk, Timeline, Banks, Assets, and Work, merge *suggestions* (exact phone/email/document or name + compatible partial DOB; no silent auto-merge), JSContact Card export (identity + contact points).
 
 Designed for collaborative development by neural network agents. Parses person dossiers into a CRM domain model with full provenance, explicit merge control, and a modern responsive UI.
 
@@ -23,14 +23,14 @@ Designed for collaborative development by neural network agents. Parses person d
 
 Turn complex, multi-source person reports (Void Search HTML/JSON exports and similar) into a clean, queryable, auditable contact graph that feels as responsive and intuitive as modern personal CRMs while preserving every original fact and its source.
 
-## Core Capabilities (v0.2.0)
+## Core Capabilities (v0.3.0)
 
 - **Ingest** Void HTML (`void-html`), sectioned plain-text (`sectioned-text`), and inline-dossier scoring dumps (`inline-dossier`)
-- **Normalize** into Person + ContactPoints, IdentityDocuments, Addresses, Relationships; RiskScore + Incident from scoring headers
+- **Normalize** into Person + ContactPoints, IdentityDocuments, Addresses, Relationships, BankRelations, Vehicles, Employments, FinancialFacts; RiskScore + Incident from scoring headers
 - **Provenance** on every fact (report, source name, original key/value, timestamps)
 - **Merge suggestions** by exact phone / email / document, or by name + compatible partial DOB — user confirms; no silent merge
-- **360° Contact View** — Overview / Identity / Documents / Addresses / Network / Risk / Timeline / Sources; copy-on-click
-- **JSContact export** — identity + phones/emails as RFC 9553 / RFC 9982 Card `version: "2.0"`; `uid` is the Person UUID; colliding extras are vendor-prefixed `contact-vault.local:`
+- **360° Contact View** — Overview / Identity / Documents / Addresses / Network / Risk / Timeline / Banks / Assets / Work / Sources; copy-on-click
+- **JSContact export** — identity + phones/emails as RFC 9553 / RFC 9982 Card `version: "2.0"`; `uid` is the Person UUID; colliding extras are vendor-prefixed `contact-vault.local:`; banks / vehicles / employments / financial facts are not exported
 - **Responsive** dark/light UI — Next.js 15 + shadcn/ui
 
 ## Tech Stack (ADR-001)
@@ -136,20 +136,20 @@ Parser unit fixtures live under `packages/parser/fixtures/` (same synthetic poli
 
 ## Manual smoke checklist (release gate)
 
-Playwright is **not** required for v0.2.0. Use the UI and/or `pnpm smoke`:
+Playwright is **not** required for v0.3.0. Use the UI and/or `pnpm smoke`:
 
 1. Import `samples/sectioned-text/person-basic.txt` → format `sectioned-text`, person in list.
-2. Import `samples/void-html/person-basic.embed.html` → format `void-html`.
+2. Import `samples/void-html/person-basic.embed.html` → format `void-html`; Contact 360 **Banks** / **Assets** / **Work** show ТестБанк / ТестМарка / ООО ТестРабота + amount 450000.
 3. Import `samples/inline-dossier/person-scoring-basic.txt` → format `inline-dossier`; Contact 360 **Risk** shows score.
 4. Open Contact 360; copy phone; check source badges.
 5. **Timeline** lists the import (newest first) with format and content hash.
-6. **Export JSContact** downloads a Card whose `uid` is the Person UUID and whose phones/emails match stored points.
+6. **Export JSContact** downloads a Card whose `uid` is the Person UUID and whose phones/emails match stored points (no banks / vehicles / work).
 7. Re-import `samples/sectioned-text/person-basic.txt` (same content as step 1) → `duplicate: true`.
 8. Import `samples/sectioned-text/person-variant-shared-phone.txt` → merge suggestions (no self-suggestion); Accept or Dismiss.
 9. After Accept: survivor **Sources** lists report imports from both persons; Timeline includes the merge event.
 10. Soft-delete hides contact from list; 360 returns not found.
 
-`pnpm smoke` requires Docker Postgres (`docker compose up -d` + `pnpm db:migrate:deploy`). See script header in `scripts/smoke-import.ts`. Automated smoke is 7 API steps (no UI copy-phone / Timeline / JSContact steps); it covers the three imports, sectioned re-import, merge accept, and soft-delete.
+`pnpm smoke` requires Docker Postgres (`docker compose up -d` + `pnpm db:migrate:deploy`). See script header in `scripts/smoke-import.ts`. Automated smoke is 7 API steps (no UI copy-phone / Timeline / JSContact steps); it covers the three imports, void-html Banks/Assets/Work facts, sectioned re-import, merge accept, and soft-delete.
 
 ## Documentation Map
 
@@ -163,7 +163,7 @@ Playwright is **not** required for v0.2.0. Use the UI and/or `pnpm smoke`:
 | [docs/03-ARCHITECTURE/](docs/03-ARCHITECTURE/) | Architecture + ADRs |
 | [docs/06-ENGINEERING/Agent-Playbook.md](docs/06-ENGINEERING/Agent-Playbook.md) | **How NN agents must work** |
 | [docs/07-ROADMAP/MVP-Scope.md](docs/07-ROADMAP/MVP-Scope.md) | v0.1.0 checklist (complete) |
-| [docs/07-ROADMAP/Roadmap.md](docs/07-ROADMAP/Roadmap.md) | Research notes + v0.3 plan (v0.2.0 shipped) |
+| [docs/07-ROADMAP/Roadmap.md](docs/07-ROADMAP/Roadmap.md) | Research notes + later plan (v0.3.0 shipped) |
 | [docs/08-LEGAL-ETHICS/Data-Handling.md](docs/08-LEGAL-ETHICS/Data-Handling.md) | PII / fixtures policy |
 
 ## Ethics & Legal

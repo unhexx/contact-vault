@@ -1,9 +1,9 @@
 /**
- * Local smoke import (v0.2.0 release gate).
+ * Local smoke import (v0.3.0 release gate).
  *
  * Exercises three-format import (sectioned-text, void-html, inline-dossier),
- * re-import idempotency, merge accept path, and soft-delete against Docker
- * Postgres. No Playwright.
+ * void-html Banks/Assets/Work facts, re-import idempotency, merge accept
+ * path, and soft-delete against Docker Postgres. No Playwright.
  *
  * Prerequisites:
  *   docker compose up -d
