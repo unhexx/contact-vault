@@ -33,6 +33,25 @@ const t = initTRPC.context<TrpcContext>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
+/** Dossier + merge procedures: session required when AUTH_ENABLED. */
+export const operatorProcedure = t.procedure.use(({ ctx, next }) => {
+  if (!ctx.env.authEnabled) {
+    return next({
+      ctx: {
+        ...ctx,
+        operator: ctx.operator ?? { username: "local" },
+      },
+    });
+  }
+  if (!ctx.operator) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "Sign in required",
+    });
+  }
+  return next({ ctx });
+});
+
 function isZodError(err: unknown): err is ZodError {
   return err instanceof ZodError || (err as { name?: string })?.name === "ZodError";
 }

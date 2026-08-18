@@ -7,10 +7,10 @@ import { dbFormatToParser } from "@contact-vault/db";
 
 import { AppError } from "../../errors.js";
 import { importReport } from "../../services/ingestion.js";
-import { publicProcedure, router, wrap } from "../trpc.js";
+import { operatorProcedure, router, wrap } from "../trpc.js";
 
 export const reportsRouter = router({
-  import: publicProcedure
+  import: operatorProcedure
     .input(
       z.object({
         filename: z.string().min(1),
@@ -30,7 +30,7 @@ export const reportsRouter = router({
       ),
     ),
 
-  get: publicProcedure
+  get: operatorProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(({ ctx, input }) =>
       wrap(async () => {

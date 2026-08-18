@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { GitMerge, Import, Users } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { OperatorSession } from "@/components/operator-session";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +15,15 @@ const nav = [
   { href: "/merge", label: "Merge", icon: GitMerge },
 ] as const;
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  authEnabled = false,
+  operator = null,
+}: {
+  children: ReactNode;
+  authEnabled?: boolean;
+  operator?: string | null;
+}) {
   const pathname = usePathname();
 
   return (
@@ -50,7 +59,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               })}
             </nav>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-1">
+            <OperatorSession authEnabled={authEnabled} operator={operator} />
+            <ThemeToggle />
+          </div>
         </div>
         {/* Mobile bottom-ish secondary nav in header strip */}
         <nav

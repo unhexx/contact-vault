@@ -25,6 +25,9 @@ export function createTrpcClient(opts?: { url?: string }) {
       httpBatchLink({
         url,
         transformer: superjson,
+        fetch(input, opts) {
+          return fetch(input, { ...opts, credentials: "same-origin" });
+        },
       }),
     ],
   });

@@ -34,7 +34,7 @@ Load Person + children. Group by section. Every value copyable and source-badged
 
 ## Cross-cutting
 
-- Auth: single-user local first
+- Auth: single-user local first; optional env-defined operators (`AUTH_ENABLED`) + session cookie (not multi-tenant)
 - i18n: next-intl (RU/EN)
 - PII: never log full document numbers at info level; optional AES-256-GCM on raw-report blobs and IdentityDocument numbers (HMAC of `numberNorm`; not TDE)
 

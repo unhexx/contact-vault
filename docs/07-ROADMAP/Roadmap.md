@@ -96,7 +96,7 @@ Stock PostgreSQL 16 has **no TDE** (ADR-002). Operator LUKS / volume encryption 
 
 - [x] Optional AES-256-GCM on `STORE_RAW_REPORTS` blobs + env key + round-trip tests (first increment).
 - [x] IdentityDocument number ciphertext + searchable HMAC / blind index (after blobs).
-- [ ] Multi-user auth (after blobs; still not multi-tenant SaaS).
+- [x] Optional local operator login (env `AUTH_ENABLED` + `AUTH_OPERATORS`; session cookie; unauthenticated local-dev remains default).
 
 ## Later
 

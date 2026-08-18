@@ -14,10 +14,10 @@ import {
   previewMerge,
   undoMerge,
 } from "../../services/merge.js";
-import { publicProcedure, router, wrap } from "../trpc.js";
+import { operatorProcedure, router, wrap } from "../trpc.js";
 
 export const mergeRouter = router({
-  listSuggestions: publicProcedure
+  listSuggestions: operatorProcedure
     .input(
       z
         .object({
@@ -35,13 +35,13 @@ export const mergeRouter = router({
       ),
     ),
 
-  preview: publicProcedure
+  preview: operatorProcedure
     .input(z.object({ suggestionId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       wrap(async () => previewMerge(ctx.prisma, input.suggestionId)),
     ),
 
-  accept: publicProcedure
+  accept: operatorProcedure
     .input(z.object({ suggestionId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       wrap(async () => {
@@ -63,13 +63,13 @@ export const mergeRouter = router({
       }),
     ),
 
-  dismiss: publicProcedure
+  dismiss: operatorProcedure
     .input(z.object({ suggestionId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       wrap(async () => dismissSuggestion(ctx.prisma, input.suggestionId)),
     ),
 
-  undo: publicProcedure
+  undo: operatorProcedure
     .input(z.object({ auditEventId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       wrap(async () => undoMerge(ctx.prisma, input.auditEventId)),

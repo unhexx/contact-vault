@@ -17,7 +17,7 @@ Development is expected to be performed primarily by neural-network coding agent
 
 ## Current phase
 
-**v0.4.0** — three ingestion formats, Contact 360 (Risk + Timeline + Banks + Assets + Work), exact and name+partial-DOB merge suggestions, reversible merge undo from Timeline, JSContact Card export (identity + contact points; banks / vehicles / work stay out of Card). Next: **v0.5** optional at-rest protection (report blobs + document-number HMAC). See [docs/07-ROADMAP/Roadmap.md](07-ROADMAP/Roadmap.md).
+**v0.4.0** shipped. **v0.5** in progress — optional at-rest protection (report-blob AES-256-GCM + document-number HMAC) and optional local operator login (`AUTH_ENABLED`; unauthenticated local-dev remains the default). See [docs/07-ROADMAP/Roadmap.md](07-ROADMAP/Roadmap.md).
 
 ## Supported formats
 

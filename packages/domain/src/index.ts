@@ -2,7 +2,8 @@
  * @contact-vault/domain
  *
  * MVP contracts: Zod schemas, content-hash authority, match helpers (exact + name/DOB),
- * JSContact Card export mapper, optional report-blob / document-number envelopes. No Prisma, no parser I/O.
+ * JSContact Card export mapper, optional report-blob / document-number envelopes,
+ * optional local-operator session helpers. No Prisma, no parser I/O.
  */
 
 // Content hash (KD13)
@@ -23,6 +24,23 @@ export {
   type ReportBlobEnvelope,
   type ReportBlobErrorCode,
 } from "./report-blob.js";
+
+// Optional local operator login (v0.5) — env operators + HMAC session
+export {
+  AUTH_SESSION_TTL_SECONDS,
+  AUTH_SESSION_VERSION,
+  AuthError,
+  createSessionToken,
+  parseAuthOperators,
+  parseAuthSessionSecret,
+  resolveAuthConfig,
+  verifyOperatorPassword,
+  verifySessionToken,
+  type AuthConfig,
+  type AuthErrorCode,
+  type AuthOperator,
+  type AuthSession,
+} from "./auth.js";
 
 // Optional AES-256-GCM + HMAC blind index for IdentityDocument numbers (v0.5)
 export {

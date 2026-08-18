@@ -5,10 +5,10 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 
 import { listPersonTimeline } from "../../services/timeline.js";
-import { publicProcedure, router, wrap } from "../trpc.js";
+import { operatorProcedure, router, wrap } from "../trpc.js";
 
 export const contactsRouter = router({
-  list: publicProcedure
+  list: operatorProcedure
     .input(
       z
         .object({
@@ -29,7 +29,7 @@ export const contactsRouter = router({
       }),
     ),
 
-  get360: publicProcedure
+  get360: operatorProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(({ ctx, input }) =>
       wrap(async () => {
@@ -44,7 +44,7 @@ export const contactsRouter = router({
       }),
     ),
 
-  timeline: publicProcedure
+  timeline: operatorProcedure
     .input(
       z.object({
         id: z.string().uuid(),
@@ -55,7 +55,7 @@ export const contactsRouter = router({
       wrap(async () => listPersonTimeline(ctx.prisma, input.id, input.limit)),
     ),
 
-  softDelete: publicProcedure
+  softDelete: operatorProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       wrap(async () => {

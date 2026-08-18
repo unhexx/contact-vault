@@ -120,6 +120,9 @@ pnpm smoke            # three-format import + re-import + merge path (requires P
 | `DATABASE_URL` | (required) | Prisma connection string |
 | `STORE_RAW_REPORTS` | `false` | When `true`, write raw bodies to `data/reports/{id}.bin` (gitignored) |
 | `REPORT_BLOB_KEY` | — | Optional 64-hex AES-256 key. Seals `STORE_RAW_REPORTS` blobs and IdentityDocument numbers (HMAC of `numberNorm` stays searchable). Unset keeps plaintext. Never log. |
+| `AUTH_ENABLED` | `false` | When `true`, gate the web UI and tRPC behind local operator login. Fail closed without `AUTH_SESSION_SECRET` + `AUTH_OPERATORS`. |
+| `AUTH_SESSION_SECRET` | — | 64-hex HMAC key for the session cookie. Required when auth is enabled. Never log. |
+| `AUTH_OPERATORS` | — | `user:password[,user:password]`. Local operators only; no public signup. Required when auth is enabled. |
 | `NEXT_PUBLIC_APP_URL` | — | Optional public base URL |
 | `SKIP_DB_TESTS` | — | Set `1` to skip Postgres integration tests |
 

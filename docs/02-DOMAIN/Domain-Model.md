@@ -311,6 +311,7 @@ Supporting types (`TravelRecord`, `PaymentCard`, `PhoneReputation`) follow the s
 - Soft-delete only; hard delete is a privileged, logged operation.
 - Confidence scores are informational; UI must always show sources.
 - Criminal / scoring data is first-class (RiskScore + Incident), not free-text notes.
+- Operators are **not** a domain aggregate. Optional local login (`AUTH_ENABLED`) is env-defined (`AUTH_OPERATORS`); there is no tenant / org model.
 
 ## Mapping from report formats
 

@@ -1,5 +1,6 @@
 /**
- * tRPC context — single-user local composition root (no auth).
+ * tRPC context — local composition root.
+ * Optional operator session when AUTH_ENABLED (otherwise operator is "local").
  */
 import {
   createAuditLogRepository,
@@ -13,8 +14,12 @@ import {
   type PrismaClient,
   type ReportImportRepository,
 } from "@contact-vault/db";
+import type { AuthSession } from "@contact-vault/domain";
 
+import { readOperatorFromRequest } from "../auth.js";
 import { getEnv, type Env } from "../env.js";
+
+export type OperatorSession = AuthSession;
 
 export type TrpcContext = {
   prisma: PrismaClient;
@@ -23,6 +28,8 @@ export type TrpcContext = {
   mergeSuggestionRepo: MergeSuggestionRepository;
   auditLogRepo: AuditLogRepository;
   env: Env;
+  operator: OperatorSession | null;
+  resHeaders: Headers | null;
 };
 
 let prismaSingleton: PrismaClient | null = null;
@@ -37,7 +44,19 @@ function resolvePrisma(databaseUrl: string): PrismaClient {
   return prismaSingleton;
 }
 
-export function createContext(): TrpcContext {
+function resolveOperator(
+  env: Env,
+  req: Request | undefined,
+): OperatorSession | null {
+  if (!env.authEnabled) return { username: "local" };
+  if (!req || !env.authSessionSecret) return null;
+  return readOperatorFromRequest(req, env.authSessionSecret);
+}
+
+export function createContext(opts?: {
+  req?: Request;
+  resHeaders?: Headers;
+}): TrpcContext {
   const env = getEnv();
   const prisma = resolvePrisma(env.DATABASE_URL);
   return {
@@ -49,6 +68,8 @@ export function createContext(): TrpcContext {
     mergeSuggestionRepo: createMergeSuggestionRepository(prisma),
     auditLogRepo: createAuditLogRepository(prisma),
     env,
+    operator: resolveOperator(env, opts?.req),
+    resHeaders: opts?.resHeaders ?? null,
   };
 }
 
@@ -56,8 +77,18 @@ export function createContext(): TrpcContext {
 export function createContextWithPrisma(
   prisma: PrismaClient,
   envOverrides?: Partial<Env>,
+  extras?: {
+    operator?: OperatorSession | null;
+    resHeaders?: Headers;
+  },
 ): TrpcContext {
   const env = { ...getEnv(), ...envOverrides };
+  const operator =
+    extras && "operator" in extras
+      ? (extras.operator ?? null)
+      : env.authEnabled
+        ? null
+        : { username: "local" };
   return {
     prisma,
     personRepo: createPersonRepository(prisma, {
@@ -67,5 +98,7 @@ export function createContextWithPrisma(
     mergeSuggestionRepo: createMergeSuggestionRepository(prisma),
     auditLogRepo: createAuditLogRepository(prisma),
     env,
+    operator,
+    resHeaders: extras?.resHeaders ?? null,
   };
 }

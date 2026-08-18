@@ -11,7 +11,7 @@ const handler = (req: Request) =>
     endpoint: "/api/trpc",
     req,
     router: appRouter,
-    createContext: () => createContext(),
+    createContext: ({ req, resHeaders }) => createContext({ req, resHeaders }),
     onError({ error, path }) {
       // Structured log without raw PII content
       console.error(
