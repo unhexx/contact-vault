@@ -327,6 +327,11 @@ export function createPersonRepository(
           OR: [
             { canonicalFull: { contains: q, mode: "insensitive" } },
             {
+              nameVariants: {
+                some: { full: { contains: q, mode: "insensitive" } },
+              },
+            },
+            {
               contactPoints: {
                 some: {
                   deletedAt: null,

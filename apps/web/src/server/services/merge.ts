@@ -52,6 +52,80 @@ function mergeProvenance(a: unknown, b: unknown): Prisma.InputJsonValue {
   return [...asProvenanceArray(a), ...asProvenanceArray(b)] as Prisma.InputJsonValue;
 }
 
+/** Person-row scalars that merge must not drop (review Issue 1). */
+export type PersonScalarFields = {
+  canonicalFull: string | null;
+  canonicalLast: string | null;
+  canonicalFirst: string | null;
+  canonicalMiddle: string | null;
+  dateOfBirth: string | null;
+  placeOfBirth: string | null;
+  gender: string | null;
+  extras: unknown;
+};
+
+export type MergedPersonScalars = {
+  canonicalFull: string | null;
+  canonicalLast: string | null;
+  canonicalFirst: string | null;
+  canonicalMiddle: string | null;
+  dateOfBirth: string | null;
+  placeOfBirth: string | null;
+  gender: string | null;
+  extras: Record<string, unknown> | null;
+};
+
+function isBlankScalar(value: string | null | undefined): boolean {
+  return value == null || value.trim() === "";
+}
+
+function extrasAsRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return null;
+}
+
+function pickScalar(target: string | null, source: string | null): string | null {
+  return isBlankScalar(target) ? source : target;
+}
+
+/**
+ * Survivor-wins on each scalar when both are set; fill blank target from source.
+ * extras: merge object keys, target wins on conflict; empty/null extras are blank.
+ */
+export function pickSurvivorScalars(
+  target: PersonScalarFields,
+  source: PersonScalarFields,
+): MergedPersonScalars {
+  const targetExtras = extrasAsRecord(target.extras);
+  const sourceExtras = extrasAsRecord(source.extras);
+  const targetExtrasBlank = !targetExtras || Object.keys(targetExtras).length === 0;
+  const sourceExtrasBlank = !sourceExtras || Object.keys(sourceExtras).length === 0;
+
+  let extras: Record<string, unknown> | null;
+  if (targetExtrasBlank && sourceExtrasBlank) {
+    extras = targetExtras ?? sourceExtras ?? null;
+  } else if (targetExtrasBlank) {
+    extras = sourceExtras;
+  } else if (sourceExtrasBlank) {
+    extras = targetExtras;
+  } else {
+    extras = { ...sourceExtras, ...targetExtras };
+  }
+
+  return {
+    canonicalFull: pickScalar(target.canonicalFull, source.canonicalFull),
+    canonicalLast: pickScalar(target.canonicalLast, source.canonicalLast),
+    canonicalFirst: pickScalar(target.canonicalFirst, source.canonicalFirst),
+    canonicalMiddle: pickScalar(target.canonicalMiddle, source.canonicalMiddle),
+    dateOfBirth: pickScalar(target.dateOfBirth, source.dateOfBirth),
+    placeOfBirth: pickScalar(target.placeOfBirth, source.placeOfBirth),
+    gender: pickScalar(target.gender, source.gender),
+    extras,
+  };
+}
+
 async function countChildren(
   prisma: PrismaClient,
   personId: string,
@@ -263,14 +337,26 @@ export async function mergePersons(
 
   return prisma.$transaction(
     async (tx) => {
+      const personScalarSelect = {
+        id: true,
+        canonicalFull: true,
+        canonicalLast: true,
+        canonicalFirst: true,
+        canonicalMiddle: true,
+        dateOfBirth: true,
+        placeOfBirth: true,
+        gender: true,
+        extras: true,
+      } as const;
+
       const [source, target] = await Promise.all([
         tx.person.findFirst({
           where: { id: sourcePersonId, deletedAt: null },
-          select: { id: true },
+          select: personScalarSelect,
         }),
         tx.person.findFirst({
           where: { id: targetPersonId, deletedAt: null },
-          select: { id: true },
+          select: personScalarSelect,
         }),
       ]);
 
@@ -280,6 +366,8 @@ export async function mergePersons(
           "Cannot merge: source or target person is missing or soft-deleted",
         );
       }
+
+      const survivorScalars = pickSurvivorScalars(target, source);
 
       if (suggestionId) {
         const sug = await tx.mergeSuggestion.findUnique({
@@ -491,6 +579,24 @@ export async function mergePersons(
           data: { status: "accepted", resolvedAt: now },
         });
       }
+
+      // Fill blank target scalars from source; always write so @updatedAt moves
+      await tx.person.update({
+        where: { id: targetPersonId },
+        data: {
+          canonicalFull: survivorScalars.canonicalFull,
+          canonicalLast: survivorScalars.canonicalLast,
+          canonicalFirst: survivorScalars.canonicalFirst,
+          canonicalMiddle: survivorScalars.canonicalMiddle,
+          dateOfBirth: survivorScalars.dateOfBirth,
+          placeOfBirth: survivorScalars.placeOfBirth,
+          gender: survivorScalars.gender,
+          extras:
+            survivorScalars.extras == null
+              ? Prisma.DbNull
+              : toJson(survivorScalars.extras),
+        },
+      });
 
       // Soft-delete source
       await tx.person.update({

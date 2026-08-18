@@ -9,7 +9,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { createPrismaClient, type PrismaClient } from "@contact-vault/db";
+import {
+  createPersonRepository,
+  createPrismaClient,
+  type PrismaClient,
+} from "@contact-vault/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { importReport } from "./ingestion.js";
@@ -249,6 +253,86 @@ Email: dismiss.other.${stamp}@example.com
       ),
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
+
+  it("merge fills blank target Person scalars from source and keeps them on 360", async () => {
+    const stamp = Date.now();
+    const phone = `+7900${String(stamp).slice(-7)}`;
+    const sourceName = `Синтетик Источник ${stamp}`;
+    const emptyProv = [] as const;
+
+    const target = await prisma.person.create({
+      data: {
+        contactPoints: {
+          create: {
+            kind: "phone",
+            e164: phone,
+            raw: phone,
+            provenance: emptyProv,
+          },
+        },
+      },
+    });
+
+    const source = await prisma.person.create({
+      data: {
+        canonicalFull: sourceName,
+        canonicalLast: "Синтетик",
+        canonicalFirst: "Источник",
+        canonicalMiddle: "Тестович",
+        dateOfBirth: "1990-01-15",
+        placeOfBirth: "г. Тестовск",
+        gender: "male",
+        extras: { note: "source-only" },
+        contactPoints: {
+          create: {
+            kind: "phone",
+            e164: phone,
+            raw: phone,
+            provenance: emptyProv,
+          },
+        },
+        nameVariants: {
+          create: {
+            full: sourceName,
+            last: "Синтетик",
+            first: "Источник",
+            middle: "Тестович",
+            provenance: emptyProv,
+          },
+        },
+      },
+    });
+
+    await mergePersons(prisma, {
+      sourcePersonId: source.id,
+      targetPersonId: target.id,
+    });
+
+    const persons = createPersonRepository(prisma);
+    const survivor = await persons.get360(target.id);
+    expect(survivor).not.toBeNull();
+    expect(survivor!.canonicalName?.full).toBe(sourceName);
+    expect(survivor!.dateOfBirth).toBe("1990-01-15");
+    expect(survivor!.placeOfBirth).toBe("г. Тестовск");
+    expect(survivor!.gender).toBe("male");
+    expect(survivor!.extras).toEqual({ note: "source-only" });
+
+    const targetRow = await prisma.person.findUnique({ where: { id: target.id } });
+    expect(targetRow?.canonicalFull).toBe(sourceName);
+    expect(targetRow?.canonicalLast).toBe("Синтетик");
+    expect(targetRow?.canonicalFirst).toBe("Источник");
+    expect(targetRow?.canonicalMiddle).toBe("Тестович");
+    expect(targetRow?.updatedAt.getTime()).toBeGreaterThanOrEqual(
+      target.updatedAt.getTime(),
+    );
+    expect(targetRow?.deletedAt).toBeNull();
+
+    const sourceRow = await prisma.person.findUnique({ where: { id: source.id } });
+    expect(sourceRow?.deletedAt).not.toBeNull();
+
+    const listed = await persons.list({ q: sourceName, limit: 20 });
+    expect(listed.items.some((item) => item.id === target.id)).toBe(true);
+  }, 60_000);
 
   it("imports void-html fixture", async () => {
     const content = load(fixtureHtml) + `\n<!-- ${Date.now()} -->\n`;

@@ -352,6 +352,43 @@ describe.skipIf(!hasDb)("db integration", () => {
     expect(new Set(allIds).size).toBe(3);
   });
 
+  it("list search matches nameVariants.full when canonicalFull is empty", async () => {
+    const report = await ensureReportImport(ctx);
+    const variantFull = "Вариантов Вариант Вариантович";
+    const person = await ctx.persons.createFromDraft(
+      {
+        nameVariants: [
+          {
+            full: variantFull,
+            last: "Вариантов",
+            first: "Вариант",
+            middle: "Вариантович",
+            provenance: prov(report.id),
+          },
+        ],
+        contactPoints: [],
+        documents: [],
+        addresses: [],
+        relationships: [],
+      },
+      {
+        reportImportId: report.id,
+        contentHash: report.contentHash,
+        query: "variant-search",
+        mode: "void_html",
+      },
+    );
+
+    const row = await ctx.prisma.person.findUnique({ where: { id: person.id } });
+    expect(row?.canonicalFull).toBeNull();
+
+    const byVariant = await ctx.persons.list({ q: "Вариантов", limit: 10 });
+    expect(byVariant.items.some((item) => item.id === person.id)).toBe(true);
+    expect(byVariant.items.find((item) => item.id === person.id)?.displayName).toBe(
+      variantFull,
+    );
+  });
+
   it("list search matches phone e164 and emailNorm", async () => {
     const report = await ensureReportImport(ctx);
     await ctx.persons.createFromDraft(
