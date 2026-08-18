@@ -1,6 +1,6 @@
 # Contact Vault Roadmap
 
-Living plan after **v0.4.0**. Next release is **v0.5** (optional at-rest protection; report blobs then document numbers). Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
+Living plan after **v0.5.0**. Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
 
 ## Research notes (2026-08-18)
 
@@ -62,7 +62,11 @@ CDD / FATF Rec. 10 order after identity: bank relations first (PRD G1), then veh
 
 `merge.undo` restores no-collision and collision-path merges from the audit event (`targetScalarsBefore` + `targetProvenanceBefore`; colliding contact/doc soft-deleted on source, skipped PSR kept). Contact 360 Timeline **Undo merge** calls it; disabled when `mergeUndoBlockReason` is set (legacy hard-delete / missing scalars) or the merge is already undone / superseded.
 
-## Next release: v0.5 — optional at-rest protection
+### v0.5.0 — optional at-rest protection + local login
+
+Optional AES-256-GCM on `STORE_RAW_REPORTS` blobs when `REPORT_BLOB_KEY` is set (`contentHash` stays SHA-256 of plaintext). IdentityDocument `number` ciphertext + HMAC-SHA256 of `numberNorm` (`h1:<hex>`) so exact full-number match still works. Optional local operator login (`AUTH_ENABLED` + `AUTH_SESSION_SECRET` + `AUTH_OPERATORS`; HttpOnly session cookie; off by default). Fail closed on wrong/missing key or `AUTH_ENABLED` without secret/operators. Do not encrypt `e164` / `emailNorm`. Not multi-tenant SaaS.
+
+## Research notes (v0.5, shipped)
 
 ### Research notes (2026-08-18, v0.5)
 
@@ -92,7 +96,7 @@ Stock PostgreSQL 16 has **no TDE** (ADR-002). Operator LUKS / volume encryption 
 
 **Skip this release:** vehicle photo / lightbox, payment-card PAN as a searchable identity, bank-name matching, employment graph, inventing Postgres TDE, graph visualization (PRD non-goal; Relationship stays a hint), `pg_trgm` / weighted fuzzy (no suggestion-volume justification; name+partial-DOB already shipped).
 
-### v0.5.x slices
+### v0.5.x slices (shipped in v0.5.0)
 
 - [x] Optional AES-256-GCM on `STORE_RAW_REPORTS` blobs + env key + round-trip tests (first increment).
 - [x] IdentityDocument number ciphertext + searchable HMAC / blind index (after blobs).

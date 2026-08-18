@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version 0.4.0" src="https://img.shields.io/badge/version-0.4.0-0ea5e9?style=flat-square" />
+  <img alt="Version 0.5.0" src="https://img.shields.io/badge/version-0.5.0-0ea5e9?style=flat-square" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" />
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-000000?style=flat-square&logo=nextdotjs&logoColor=white" />
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" />
@@ -15,7 +15,7 @@
 
 **Contact management platform with OSINT report ingestion (void-html, sectioned-text, inline-dossier).**
 
-Version **0.4.0** — three-format import, Person 360 with provenance, Risk, Timeline, Banks, Assets, and Work, merge *suggestions* (exact phone/email/document or name + compatible partial DOB; no silent auto-merge), reversible merge undo from Timeline, JSContact Card export (identity + contact points).
+Version **0.5.0** — three-format import, Person 360 with provenance, Risk, Timeline, Banks, Assets, and Work, merge *suggestions* (exact phone/email/document or name + compatible partial DOB; no silent auto-merge), reversible merge undo from Timeline, optional report-blob encryption, document-number ciphertext+HMAC, optional local operator login, JSContact Card export (identity + contact points).
 
 Designed for collaborative development by neural network agents. Parses person dossiers into a CRM domain model with full provenance, explicit merge control, and a modern responsive UI.
 
@@ -23,13 +23,16 @@ Designed for collaborative development by neural network agents. Parses person d
 
 Turn complex, multi-source person reports (Void Search HTML/JSON exports and similar) into a clean, queryable, auditable contact graph that feels as responsive and intuitive as modern personal CRMs while preserving every original fact and its source.
 
-## Core Capabilities (v0.4.0)
+## Core Capabilities (v0.5.0)
 
 - **Ingest** Void HTML (`void-html`), sectioned plain-text (`sectioned-text`), and inline-dossier scoring dumps (`inline-dossier`)
 - **Normalize** into Person + ContactPoints, IdentityDocuments, Addresses, Relationships, BankRelations, Vehicles, Employments, FinancialFacts; RiskScore + Incident from scoring headers
 - **Provenance** on every fact (report, source name, original key/value, timestamps)
 - **Merge suggestions** by exact phone / email / document, or by name + compatible partial DOB — user confirms; no silent merge
 - **Reversible merge** — Timeline **Undo merge** restores the source from the audit event (scalars, children, colliding soft-deletes); disabled when `mergeUndoBlockReason` is set (legacy hard-delete / missing scalars) or the merge is already undone / superseded
+- **Optional report-blob encryption** — `STORE_RAW_REPORTS=true` + `REPORT_BLOB_KEY` (64-hex) writes an AES-256-GCM envelope to `data/reports/{id}.bin`; no key keeps plaintext; `STORE_RAW_REPORTS=false` stores no body
+- **Document-number ciphertext + HMAC** — with `REPORT_BLOB_KEY`, `IdentityDocument.number` is sealed (purpose=`doc-number`) and `numberNorm` is `h1:<hex>` so full-number exact match still works; leftover plaintext remains when no key
+- **Optional local operator login** — `AUTH_ENABLED` (off by default) + `AUTH_SESSION_SECRET` + `AUTH_OPERATORS` gates vault pages and dossier tRPC; unauthenticated local-dev remains the default
 - **360° Contact View** — Overview / Identity / Documents / Addresses / Network / Risk / Timeline / Banks / Assets / Work / Sources; copy-on-click
 - **JSContact export** — identity + phones/emails as RFC 9553 / RFC 9982 Card `version: "2.0"`; `uid` is the Person UUID; colliding extras are vendor-prefixed `contact-vault.local:`; banks / vehicles / employments / financial facts are not exported
 - **Responsive** dark/light UI — Next.js 15 + shadcn/ui
@@ -141,7 +144,7 @@ Parser unit fixtures live under `packages/parser/fixtures/` (same synthetic poli
 
 ## Manual smoke checklist (release gate)
 
-Playwright is **not** required for v0.4.0. Use the UI and/or `pnpm smoke`:
+Playwright is **not** required for v0.5.0. Use the UI and/or `pnpm smoke`:
 
 1. Import `samples/sectioned-text/person-basic.txt` → format `sectioned-text`, person in list.
 2. Import `samples/void-html/person-basic.embed.html` → format `void-html`; Contact 360 **Banks** / **Assets** / **Work** show ТестБанк / ТестМарка / ООО ТестРабота + amount 450000.
@@ -169,7 +172,7 @@ Playwright is **not** required for v0.4.0. Use the UI and/or `pnpm smoke`:
 | [docs/03-ARCHITECTURE/](docs/03-ARCHITECTURE/) | Architecture + ADRs |
 | [docs/06-ENGINEERING/Agent-Playbook.md](docs/06-ENGINEERING/Agent-Playbook.md) | **How NN agents must work** |
 | [docs/07-ROADMAP/MVP-Scope.md](docs/07-ROADMAP/MVP-Scope.md) | v0.1.0 checklist (complete) |
-| [docs/07-ROADMAP/Roadmap.md](docs/07-ROADMAP/Roadmap.md) | Research notes + later plan (v0.4.0 shipped; v0.5 planned) |
+| [docs/07-ROADMAP/Roadmap.md](docs/07-ROADMAP/Roadmap.md) | Research notes + later plan (v0.5.0 shipped) |
 | [docs/08-LEGAL-ETHICS/Data-Handling.md](docs/08-LEGAL-ETHICS/Data-Handling.md) | PII / fixtures policy |
 
 ## Ethics & Legal

@@ -31,7 +31,7 @@ Full vehicle photo pipelines, full financials/flights dedicated tabs, advanced f
 
 ---
 
-v0.1.0 is **shipped**. v0.1.1, v0.2.0, v0.3.0, v0.4.0, and later versions live in [Roadmap.md](./Roadmap.md).
+v0.1.0 is **shipped**. v0.1.1, v0.2.0, v0.3.0, v0.4.0, v0.5.0, and later versions live in [Roadmap.md](./Roadmap.md).
 
 ## v0.3 note
 
@@ -39,7 +39,7 @@ Research (see Roadmap) changed the original vehicles-first sketch. **Bank relati
 
 ## v0.5 note
 
-Research (see Roadmap) picks **optional at-rest encryption of report blobs** as the first v0.5 increment, then **document-number ciphertext + HMAC**, then **optional local operator login** (PRD Risk / Data-Handling / GDPR Art. 32). `STORE_RAW_REPORTS` writes optional `data/reports/{id}.bin`; with `REPORT_BLOB_KEY` the file is an AES-256-GCM envelope and IdentityDocument numbers are sealed (HMAC of `numberNorm` stays searchable). `AUTH_ENABLED` (off by default) gates the web UI and tRPC with env-defined operators + an HttpOnly session cookie. Graph visualization and `pg_trgm` stay later. Vehicle photo, bank-name matching, PAN-as-identity, and employment graph stay out.
+**v0.5.0 shipped.** Optional at-rest encryption of report blobs, document-number ciphertext + HMAC, and optional local operator login (PRD Risk / Data-Handling / GDPR Art. 32). `STORE_RAW_REPORTS` writes optional `data/reports/{id}.bin`; with `REPORT_BLOB_KEY` the file is an AES-256-GCM envelope and IdentityDocument numbers are sealed (HMAC of `numberNorm` stays searchable). `AUTH_ENABLED` (off by default) gates the web UI and tRPC with env-defined operators + an HttpOnly session cookie. Graph visualization and `pg_trgm` stay later. Vehicle photo, bank-name matching, PAN-as-identity, and employment graph stay out.
 
 ## Checklist (v0.1.0)
 
