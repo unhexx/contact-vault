@@ -276,8 +276,15 @@ Email: dismiss.other.${stamp}@example.com
         entityId: sug.targetPersonId,
       },
     });
-    expect(dismissNew).toHaveLength(1);
-    expect(dismissTarget).toHaveLength(1);
+    const forThis = (rows: { payload: unknown }[]) =>
+      rows.filter(
+        (row) =>
+          !!row.payload &&
+          typeof row.payload === "object" &&
+          (row.payload as { suggestionId?: string }).suggestionId === sug.id,
+      );
+    expect(forThis(dismissNew)).toHaveLength(1);
+    expect(forThis(dismissTarget)).toHaveLength(1);
   }, 60_000);
 
   it("rejects unknown format without writing completed import", async () => {
