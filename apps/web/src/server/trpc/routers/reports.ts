@@ -23,6 +23,7 @@ export const reportsRouter = router({
           {
             prisma: ctx.prisma,
             storeRawReports: ctx.env.STORE_RAW_REPORTS,
+            reportBlobKey: ctx.env.reportBlobKey,
           },
           input,
         ),

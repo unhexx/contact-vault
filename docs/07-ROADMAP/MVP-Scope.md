@@ -39,7 +39,7 @@ Research (see Roadmap) changed the original vehicles-first sketch. **Bank relati
 
 ## v0.5 note
 
-Research (see Roadmap) picks **optional at-rest encryption of report blobs** as the first v0.5 increment (PRD Risk / Data-Handling / GDPR Art. 32). `STORE_RAW_REPORTS` already writes optional plaintext `data/reports/{id}.bin`. Document-number ciphertext, multi-user auth, graph visualization, and `pg_trgm` stay later. Vehicle photo, bank-name matching, PAN-as-identity, and employment graph stay out.
+Research (see Roadmap) picks **optional at-rest encryption of report blobs** as the first v0.5 increment (PRD Risk / Data-Handling / GDPR Art. 32). `STORE_RAW_REPORTS` writes optional `data/reports/{id}.bin`; with `REPORT_BLOB_KEY` the file is an AES-256-GCM envelope. Document-number ciphertext, multi-user auth, graph visualization, and `pg_trgm` stay later. Vehicle photo, bank-name matching, PAN-as-identity, and employment graph stay out.
 
 ## Checklist (v0.1.0)
 

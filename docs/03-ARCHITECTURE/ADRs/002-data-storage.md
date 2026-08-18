@@ -11,7 +11,7 @@ PostgreSQL 16 + Prisma.
 - JSONB for sparse meta / unknown original keys from text reports
 - Soft deletes (`deletedAt`) + `audit_log` for merge/unmerge
 - `ReportImport.format` enum: `void-html` | `sectioned-text` | `unknown`
-- Future: optional application-level AES-GCM on `STORE_RAW_REPORTS` blobs (v0.5); `pg_trgm` for fuzzy FIO; optional `pgvector`
+- Optional application-level AES-GCM on `STORE_RAW_REPORTS` blobs (v0.5 first slice); later: `pg_trgm` for fuzzy FIO; optional `pgvector`
 
 ## Consequences
 

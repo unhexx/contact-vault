@@ -119,6 +119,7 @@ pnpm smoke            # three-format import + re-import + merge path (requires P
 |----------|---------|---------|
 | `DATABASE_URL` | (required) | Prisma connection string |
 | `STORE_RAW_REPORTS` | `false` | When `true`, write raw bodies to `data/reports/{id}.bin` (gitignored) |
+| `REPORT_BLOB_KEY` | — | Optional 64-hex AES-256 key. With `STORE_RAW_REPORTS=true`, write AES-256-GCM envelope; unset keeps plaintext. Never log. |
 | `NEXT_PUBLIC_APP_URL` | — | Optional public base URL |
 | `SKIP_DB_TESTS` | — | Set `1` to skip Postgres integration tests |
 

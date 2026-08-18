@@ -1370,4 +1370,87 @@ Email: dismiss.other.${stamp}@example.com
       }),
     ).toBe(1);
   }, 60_000);
+
+  it("STORE_RAW_REPORTS with key writes AES-256-GCM envelope; contentHash stays plaintext", async () => {
+    const { mkdtemp, readFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const {
+      isReportBlobEnvelope,
+      parseReportBlobKey,
+    } = await import("@contact-vault/domain");
+    const { readRawReportFile } = await import("./report-blob-store.js");
+
+    const dataRoot = await mkdtemp(path.join(tmpdir(), "cv-blob-"));
+    const key = parseReportBlobKey("ab".repeat(32))!;
+    const suffix = `\n# blob-enc ${Date.now()}-${randomUUID()}\n`;
+    const content = load(fixtureTxt) + suffix;
+    const hash = contentHashOf(content);
+
+    try {
+      const r = await importReport(
+        { prisma, storeRawReports: true, dataRoot, reportBlobKey: key },
+        { filename: "person-basic.txt", content },
+      );
+      expect(r.duplicate).toBe(false);
+      expect(r.contentHash).toBe(hash);
+
+      const row = await prisma.reportImport.findUniqueOrThrow({
+        where: { id: r.reportImportId },
+      });
+      expect(row.contentHash).toBe(hash);
+      expect(row.rawStorage).toBe(
+        path.join("data", "reports", `${r.reportImportId}.bin`),
+      );
+
+      const onDisk = await readFile(path.join(dataRoot, row.rawStorage!));
+      expect(isReportBlobEnvelope(onDisk)).toBe(true);
+      expect(onDisk.toString("utf8")).not.toContain("Тестов");
+      expect(onDisk.includes(Buffer.from(content, "utf8"))).toBe(false);
+
+      expect(await readRawReportFile(dataRoot, row.rawStorage!, key)).toBe(
+        content,
+      );
+      await expect(
+        readRawReportFile(dataRoot, row.rawStorage!, null),
+      ).rejects.toMatchObject({ appCode: "REPORT_BLOB_DECRYPT_FAILED" });
+      await expect(
+        readRawReportFile(
+          dataRoot,
+          row.rawStorage!,
+          parseReportBlobKey("cd".repeat(32)),
+        ),
+      ).rejects.toMatchObject({ appCode: "REPORT_BLOB_DECRYPT_FAILED" });
+    } finally {
+      await rm(dataRoot, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("STORE_RAW_REPORTS without key writes plaintext (residual risk)", async () => {
+    const { mkdtemp, readFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { isReportBlobEnvelope } = await import("@contact-vault/domain");
+    const { readRawReportFile } = await import("./report-blob-store.js");
+
+    const dataRoot = await mkdtemp(path.join(tmpdir(), "cv-blob-pt-"));
+    const suffix = `\n# blob-pt ${Date.now()}-${randomUUID()}\n`;
+    const content = load(fixtureTxt) + suffix;
+
+    try {
+      const r = await importReport(
+        { prisma, storeRawReports: true, dataRoot },
+        { filename: "person-basic.txt", content },
+      );
+      const row = await prisma.reportImport.findUniqueOrThrow({
+        where: { id: r.reportImportId },
+      });
+      const onDisk = await readFile(path.join(dataRoot, row.rawStorage!));
+      expect(isReportBlobEnvelope(onDisk)).toBe(false);
+      expect(onDisk.toString("utf8")).toBe(content);
+      expect(await readRawReportFile(dataRoot, row.rawStorage!, null)).toBe(
+        content,
+      );
+    } finally {
+      await rm(dataRoot, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

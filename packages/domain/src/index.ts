@@ -2,7 +2,7 @@
  * @contact-vault/domain
  *
  * MVP contracts: Zod schemas, content-hash authority, match helpers (exact + name/DOB),
- * JSContact Card export mapper. No Prisma, no parser I/O.
+ * JSContact Card export mapper, optional report-blob envelope. No Prisma, no parser I/O.
  */
 
 // Content hash (KD13)
@@ -10,6 +10,19 @@ export {
   contentHashOf,
   normalizeReportContent,
 } from "./content-hash.js";
+
+// Optional AES-256-GCM envelope for STORE_RAW_REPORTS blobs (v0.5)
+export {
+  REPORT_BLOB_ALG,
+  ReportBlobEnvelopeSchema,
+  ReportBlobError,
+  isReportBlobEnvelope,
+  openReportBlob,
+  parseReportBlobKey,
+  sealReportBlob,
+  type ReportBlobEnvelope,
+  type ReportBlobErrorCode,
+} from "./report-blob.js";
 
 // Provenance (KD1)
 export { ProvenanceSchema, type Provenance } from "./provenance.js";

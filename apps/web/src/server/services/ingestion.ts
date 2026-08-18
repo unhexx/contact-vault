@@ -5,7 +5,7 @@
  * No silent merge. No raw blob by default.
  */
 import { randomUUID } from "node:crypto";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -30,6 +30,7 @@ import {
 import { parseReport, type ParseWarning } from "@contact-vault/parser";
 
 import { AppError } from "../errors.js";
+import { writeRawReportFile } from "./report-blob-store.js";
 
 /** Max UTF-16 code units of content string (~15M chars). */
 export const MAX_IMPORT_CHARS = 15_000_000;
@@ -60,6 +61,8 @@ export type IngestionDeps = {
   storeRawReports?: boolean;
   /** Project root for raw blob path (default process.cwd()). */
   dataRoot?: string;
+  /** When set with storeRawReports, write AES-256-GCM envelope. Never log. */
+  reportBlobKey?: Buffer | null;
 };
 
 /**
@@ -186,6 +189,7 @@ export async function importReport(
   const { prisma } = deps;
   const storeRaw = deps.storeRawReports ?? false;
   const dataRoot = deps.dataRoot ?? process.cwd();
+  const reportBlobKey = deps.reportBlobKey ?? null;
 
   const contentHash = contentHashOf(input.content);
   const reportImportRepo = createReportImportRepository(prisma);
@@ -362,9 +366,12 @@ export async function importReport(
     // Persist raw body only after successful commit (best-effort; clear path on failure)
     if (storeRaw && rawRel) {
       try {
-        const abs = path.join(dataRoot, rawRel);
-        await mkdir(path.dirname(abs), { recursive: true });
-        await writeFile(abs, input.content, "utf8");
+        await writeRawReportFile(
+          dataRoot,
+          rawRel,
+          input.content,
+          reportBlobKey,
+        );
       } catch (writeErr) {
         console.error(
           JSON.stringify({
