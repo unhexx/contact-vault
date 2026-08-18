@@ -31,7 +31,7 @@ Full vehicle photo pipelines, full financials/flights dedicated tabs, advanced f
 
 ---
 
-v0.1.0 is **shipped**. v0.1.1, v0.2.0, v0.3.0, and later versions live in [Roadmap.md](./Roadmap.md).
+v0.1.0 is **shipped**. v0.1.1, v0.2.0, v0.3.0, v0.4.0, and later versions live in [Roadmap.md](./Roadmap.md).
 
 ## v0.3 note
 

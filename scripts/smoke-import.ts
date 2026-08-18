@@ -1,5 +1,5 @@
 /**
- * Local smoke import (v0.3.0 release gate).
+ * Local smoke import (v0.4.0 release gate).
  *
  * Exercises three-format import (sectioned-text, void-html, inline-dossier),
  * void-html Banks/Assets/Work facts, re-import idempotency, merge accept

@@ -1,6 +1,6 @@
 # Contact Vault Roadmap
 
-Living plan after **v0.3.0**. Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
+Living plan after **v0.4.0**. Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
 
 ## Research notes (2026-08-18)
 
@@ -58,7 +58,7 @@ BankRelation from void-html `data.banks` + Contact 360 **Banks** (name required;
 
 CDD / FATF Rec. 10 order after identity: bank relations first (PRD G1), then vehicles, then employment / income. Vehicle photo/lightbox, payment-card PAN as a searchable identity, bank-name matching, and employment graph stayed out.
 
-### v0.4 (in progress) — reversible merge
+### v0.4.0 — reversible merge
 
 `merge.undo` restores no-collision and collision-path merges from the audit event (`targetScalarsBefore` + `targetProvenanceBefore`; colliding contact/doc soft-deleted on source, skipped PSR kept). Contact 360 Timeline **Undo merge** calls it; disabled when `mergeUndoBlockReason` is set (legacy hard-delete / missing scalars) or the merge is already undone / superseded.
 
