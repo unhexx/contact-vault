@@ -236,6 +236,25 @@ function bankRelationCreates(
   }));
 }
 
+function vehicleCreates(
+  draft: PersonDraft,
+): Prisma.VehicleCreateWithoutPersonInput[] {
+  return (draft.vehicles ?? []).map((v) => ({
+    brand: v.brand ?? null,
+    model: v.model ?? null,
+    year: v.year ?? null,
+    plate: v.plate ?? null,
+    vin: v.vin ?? null,
+    powerHp: v.powerHp ?? null,
+    engineVolumeCc: v.engineVolumeCc ?? null,
+    category: v.category ?? null,
+    ownershipPeriods:
+      v.ownershipPeriods != null ? toJson(v.ownershipPeriods) : undefined,
+    extras: v.extras != null ? toJson(v.extras) : undefined,
+    provenance: toJson(v.provenance),
+  }));
+}
+
 function displayNameFromPerson(p: {
   canonicalFull: string | null;
   nameVariants: { full: string }[];
@@ -280,6 +299,7 @@ export function createPersonRepository(
         riskScores: { create: riskScoreCreates(parsed) },
         incidents: { create: incidentCreates(parsed) },
         bankRelations: { create: bankRelationCreates(parsed) },
+        vehicles: { create: vehicleCreates(parsed) },
         sourceReports: {
           create: {
             reportImportId: ctx.reportImportId,

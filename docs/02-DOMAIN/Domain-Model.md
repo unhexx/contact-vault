@@ -132,9 +132,11 @@ type Address = {
 
 ### Vehicle
 
+First-class OSINT fact (v0.3). Requires **plate, vin, brand, or model**. Unknown embed keys go in `extras`. Not a merge key. Photos / lightbox stay later (MVP-Scope out).
+
 ```ts
 type Vehicle = {
-  id: string;
+  id?: string;                 // assigned on persist
   brand?: string;
   model?: string;
   year?: number;
@@ -149,13 +151,7 @@ type Vehicle = {
     ownerName?: string;
     operationCode?: string;
   }>;
-  photos?: Array<{
-    url: string;
-    date?: string;
-    listingPrice?: number;
-    mileage?: number;
-    mileageSuspect?: boolean;
-  }>;
+  extras?: Record<string, unknown>;
   provenance: Provenance[];
 };
 ```

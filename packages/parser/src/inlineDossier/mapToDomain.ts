@@ -906,6 +906,7 @@ export function mapInlineToDomain(
     riskScores: acc.riskScores,
     incidents: acc.incidents,
     bankRelations: [],
+    vehicles: [],
   };
   if (acc.canonicalName) person.canonicalName = acc.canonicalName;
   if (acc.dateOfBirth) person.dateOfBirth = acc.dateOfBirth;

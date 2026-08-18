@@ -6,6 +6,7 @@ import type {
   NameVariant,
   PersonDraft,
   Relationship,
+  Vehicle,
 } from "@contact-vault/domain";
 import { mapDocumentType, normalizeDate, normalizePhone, parseFio } from "../normalize/index.js";
 import { makeProvenance } from "../provenance.js";
@@ -30,6 +31,15 @@ function asString(v: unknown): string | undefined {
   return undefined;
 }
 
+function asFiniteNumber(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim()) {
+    const n = Number(v.trim());
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
 function asArray(v: unknown): unknown[] {
   return Array.isArray(v) ? v : [];
 }
@@ -44,6 +54,8 @@ const MAPPED_DATA_KEYS = new Set([
   "family",
   "social_profiles",
   "banks",
+  "vehicles",
+  "autoregs",
 ]);
 
 const KNOWN_BANK_KEYS = new Set([
@@ -60,6 +72,56 @@ const KNOWN_BANK_KEYS = new Set([
   "role",
   "bik",
   "bic",
+]);
+
+const KNOWN_VEHICLE_KEYS = new Set([
+  "brand",
+  "mark",
+  "make",
+  "vendor",
+  "model",
+  "year",
+  "year_issue",
+  "yearIssue",
+  "plate",
+  "reg_num",
+  "regNum",
+  "regnum",
+  "reg_number",
+  "regNumber",
+  "number",
+  "gosnomer",
+  "gos_nomer",
+  "license_plate",
+  "licensePlate",
+  "vin",
+  "body_number",
+  "bodyNumber",
+  "power",
+  "powerHp",
+  "power_hp",
+  "hp",
+  "volume",
+  "engineVolume",
+  "engine_volume",
+  "engineVolumeCc",
+  "cc",
+  "category",
+  "category_ts",
+  "from",
+  "to",
+  "date_from",
+  "dateFrom",
+  "date_to",
+  "dateTo",
+  "owner",
+  "ownerName",
+  "owner_name",
+  "operation",
+  "operationCode",
+  "operation_code",
+  "ownershipPeriods",
+  "ownership_periods",
 ]);
 
 export type CollectPersonResult = {
@@ -122,6 +184,7 @@ export function collectPersonFromEmbed(
   const addresses: Address[] = [];
   const relationships: Relationship[] = [];
   const bankRelations: BankRelation[] = [];
+  const vehicles: Vehicle[] = [];
   const nameVariants: NameVariant[] = [];
   let dateOfBirth: string | undefined;
   let placeOfBirth: string | undefined;
@@ -397,6 +460,159 @@ export function collectPersonFromEmbed(
     bankRelations.push(bank);
   }
 
+  // --- vehicles / autoregs → Vehicle (v0.3; no photo pipeline) ---
+  const collectVehicleItems = (items: unknown[], section: string) => {
+    for (const item of items) {
+      if (!isRecord(item)) continue;
+      const brand =
+        asString(item.brand) ??
+        asString(item.mark) ??
+        asString(item.make) ??
+        asString(item.vendor);
+      const model = asString(item.model);
+      const plate =
+        asString(item.plate) ??
+        asString(item.reg_num) ??
+        asString(item.regNum) ??
+        asString(item.regnum) ??
+        asString(item.reg_number) ??
+        asString(item.regNumber) ??
+        asString(item.gosnomer) ??
+        asString(item.gos_nomer) ??
+        asString(item.license_plate) ??
+        asString(item.licensePlate) ??
+        asString(item.number);
+      const vin =
+        asString(item.vin) ??
+        asString(item.body_number) ??
+        asString(item.bodyNumber);
+      if (!brand && !model && !plate && !vin) {
+        warnings.push({
+          code: "EMPTY_SECTION",
+          message: "Vehicle entry missing plate, vin, brand, or model",
+          section,
+          severity: "warn",
+        });
+        continue;
+      }
+      const yearRaw = asFiniteNumber(
+        item.year ?? item.year_issue ?? item.yearIssue,
+      );
+      const year =
+        yearRaw != null &&
+        Number.isInteger(yearRaw) &&
+        yearRaw >= 1000 &&
+        yearRaw <= 2100
+          ? yearRaw
+          : undefined;
+      const powerHp = asFiniteNumber(
+        item.powerHp ?? item.power_hp ?? item.power ?? item.hp,
+      );
+      const engineVolumeCc = asFiniteNumber(
+        item.engineVolumeCc ??
+          item.engine_volume ??
+          item.engineVolume ??
+          item.volume ??
+          item.cc,
+      );
+      const category = asString(item.category) ?? asString(item.category_ts);
+      const extras: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(item)) {
+        if (!KNOWN_VEHICLE_KEYS.has(k)) extras[k] = v;
+      }
+      if (yearRaw != null && year == null) extras.year = yearRaw;
+      const ownershipPeriods: NonNullable<Vehicle["ownershipPeriods"]> = [];
+      const listedPeriods = asArray(
+        item.ownershipPeriods ?? item.ownership_periods,
+      );
+      for (const period of listedPeriods) {
+        if (!isRecord(period)) continue;
+        const mapped = {
+          ...(asString(period.from) || asString(period.date_from)
+            ? { from: asString(period.from) ?? asString(period.date_from) }
+            : {}),
+          ...(asString(period.to) || asString(period.date_to)
+            ? { to: asString(period.to) ?? asString(period.date_to) }
+            : {}),
+          ...(asString(period.ownerName) ||
+          asString(period.owner_name) ||
+          asString(period.owner)
+            ? {
+                ownerName:
+                  asString(period.ownerName) ??
+                  asString(period.owner_name) ??
+                  asString(period.owner),
+              }
+            : {}),
+          ...(asString(period.operationCode) ||
+          asString(period.operation_code) ||
+          asString(period.operation)
+            ? {
+                operationCode:
+                  asString(period.operationCode) ??
+                  asString(period.operation_code) ??
+                  asString(period.operation),
+              }
+            : {}),
+        };
+        if (Object.keys(mapped).length > 0) ownershipPeriods.push(mapped);
+      }
+      const from =
+        asString(item.from) ??
+        asString(item.date_from) ??
+        asString(item.dateFrom);
+      const to =
+        asString(item.to) ?? asString(item.date_to) ?? asString(item.dateTo);
+      const ownerName =
+        asString(item.ownerName) ??
+        asString(item.owner_name) ??
+        asString(item.owner);
+      const operationCode =
+        asString(item.operationCode) ??
+        asString(item.operation_code) ??
+        asString(item.operation);
+      if (from || to || ownerName || operationCode) {
+        ownershipPeriods.push({
+          ...(from ? { from } : {}),
+          ...(to ? { to } : {}),
+          ...(ownerName ? { ownerName } : {}),
+          ...(operationCode ? { operationCode } : {}),
+        });
+      }
+      const vehicle: Vehicle = {
+        provenance: [
+          makeProvenance({
+            ...provBase,
+            section,
+            originalKey: plate
+              ? "plate"
+              : vin
+                ? "vin"
+                : brand
+                  ? "brand"
+                  : "model",
+            originalValue: plate ?? vin ?? brand ?? model ?? "",
+          }),
+        ],
+      };
+      if (brand) vehicle.brand = brand;
+      if (model) vehicle.model = model;
+      if (year != null) vehicle.year = year;
+      if (plate) vehicle.plate = plate;
+      if (vin) vehicle.vin = vin;
+      if (powerHp != null && powerHp > 0) vehicle.powerHp = powerHp;
+      if (engineVolumeCc != null && engineVolumeCc > 0) {
+        vehicle.engineVolumeCc = engineVolumeCc;
+      }
+      if (category) vehicle.category = category;
+      if (ownershipPeriods.length > 0) vehicle.ownershipPeriods = ownershipPeriods;
+      if (Object.keys(extras).length > 0) vehicle.extras = extras;
+      vehicles.push(vehicle);
+    }
+  };
+  collectVehicleItems(asArray(data.vehicles), "vehicles");
+  collectVehicleItems(asArray(data.autoregs), "autoregs");
+
   // --- connections / family → Relationship only (KD17) ---
   const connectionItems = [
     ...asArray(data.connections),
@@ -459,6 +675,7 @@ export function collectPersonFromEmbed(
     riskScores: [],
     incidents: [],
     bankRelations,
+    vehicles,
   };
   if (canonicalName) person.canonicalName = canonicalName;
   if (dateOfBirth) person.dateOfBirth = dateOfBirth;

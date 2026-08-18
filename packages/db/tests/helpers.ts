@@ -102,6 +102,7 @@ export function draftPerson(opts: {
     riskScores: [],
     incidents: [],
     bankRelations: [],
+    vehicles: [],
   };
 }
 
@@ -128,6 +129,7 @@ export async function truncateAll(prisma: PrismaClient): Promise<void> {
       "RiskScore",
       "Incident",
       "BankRelation",
+      "Vehicle",
       "NameVariant",
       "Person",
       "ReportImport"

@@ -40,6 +40,14 @@ export { IncidentSchema, type Incident } from "./incident.js";
 // Bank relation (v0.3)
 export { BankRelationSchema, type BankRelation } from "./bank-relation.js";
 
+// Vehicle (v0.3)
+export {
+  VehicleOwnershipPeriodSchema,
+  VehicleSchema,
+  type Vehicle,
+  type VehicleOwnershipPeriod,
+} from "./vehicle.js";
+
 // Person draft vs person (KD5)
 export {
   NameVariantSchema,

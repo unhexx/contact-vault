@@ -130,9 +130,17 @@ async function main(): Promise<void> {
       viewVoid.bankRelations.some((b) => b.bankName === "ТестБанк"),
       "void-html bank name must be ТестБанк",
     );
+    assert(
+      (viewVoid.vehicles?.length ?? 0) >= 1,
+      "void-html get360 must include Vehicle from data.vehicles",
+    );
+    assert(
+      viewVoid.vehicles.some((v) => v.brand === "ТестМарка"),
+      "void-html vehicle brand must be ТестМарка",
+    );
     log(
       "2 import void-html",
-      `person=${r2.personIds[0]!.slice(0, 8)}… format=${r2.format} banks=${viewVoid.bankRelations.length}`,
+      `person=${r2.personIds[0]!.slice(0, 8)}… format=${r2.format} banks=${viewVoid.bankRelations.length} vehicles=${viewVoid.vehicles.length}`,
     );
 
     // --- 3. inline-dossier import (scoring → riskScores + incidents on get360) ---

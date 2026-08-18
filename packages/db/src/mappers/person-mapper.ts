@@ -9,6 +9,7 @@ import type {
   Provenance,
   Relationship,
   RiskScore as DomainRiskScore,
+  Vehicle as DomainVehicle,
 } from "@contact-vault/domain";
 import type {
   Address,
@@ -21,6 +22,7 @@ import type {
   PersonSourceReport,
   Relationship as DbRelationship,
   RiskScore as DbRiskScore,
+  Vehicle as DbVehicle,
 } from "@prisma/client";
 import { normalizeSourceMode } from "../format.js";
 
@@ -39,6 +41,7 @@ export type PersonWithChildren = DbPerson & {
   riskScores: DbRiskScore[];
   incidents: DbIncident[];
   bankRelations: DbBankRelation[];
+  vehicles: DbVehicle[];
   sourceReports: PersonSourceReportWithImport[];
 };
 
@@ -225,6 +228,32 @@ function mapBankRelation(row: DbBankRelation): DomainBankRelation {
   };
 }
 
+function mapVehicle(row: DbVehicle): DomainVehicle {
+  const ownershipPeriods = Array.isArray(row.ownershipPeriods)
+    ? (row.ownershipPeriods as DomainVehicle["ownershipPeriods"])
+    : undefined;
+  return {
+    id: row.id,
+    brand: row.brand ?? undefined,
+    model: row.model ?? undefined,
+    year: row.year ?? undefined,
+    plate: row.plate ?? undefined,
+    vin: row.vin ?? undefined,
+    powerHp: row.powerHp ?? undefined,
+    engineVolumeCc: row.engineVolumeCc ?? undefined,
+    category: row.category ?? undefined,
+    ownershipPeriods:
+      ownershipPeriods && ownershipPeriods.length > 0
+        ? ownershipPeriods
+        : undefined,
+    extras:
+      row.extras && typeof row.extras === "object" && !Array.isArray(row.extras)
+        ? (row.extras as Record<string, unknown>)
+        : undefined,
+    provenance: asProvenanceArray(row.provenance),
+  };
+}
+
 function mapIncident(row: DbIncident): DomainIncident {
   return {
     id: row.id,
@@ -269,7 +298,7 @@ export function asSourceWarnings(value: unknown): SourceWarning[] {
 /**
  * Map Prisma person + children to domain Person.
  * Filters soft-deleted contact points / docs / addresses / relationships /
- * risk scores / incidents / bank relations if present.
+ * risk scores / incidents / bank relations / vehicles if present.
  */
 export function toDomainPerson(row: PersonWithChildren): Person {
   const nameVariants = row.nameVariants.map(mapNameVariant);
@@ -351,6 +380,9 @@ export function toDomainPerson(row: PersonWithChildren): Person {
     bankRelations: (row.bankRelations ?? [])
       .filter((r) => r.deletedAt == null)
       .map(mapBankRelation),
+    vehicles: (row.vehicles ?? [])
+      .filter((r) => r.deletedAt == null)
+      .map(mapVehicle),
     extras:
       row.extras && typeof row.extras === "object"
         ? (row.extras as Record<string, unknown>)
@@ -378,6 +410,7 @@ export const personInclude = {
   riskScores: { where: { deletedAt: null } },
   incidents: { where: { deletedAt: null } },
   bankRelations: { where: { deletedAt: null } },
+  vehicles: { where: { deletedAt: null } },
   nameVariants: true,
   sourceReports: {
     include: {

@@ -17,6 +17,7 @@ describe("contact-helpers", () => {
   it("recognizes Contact 360 tabs including risk and timeline", () => {
     expect(CONTACT_360_TABS).toContain("risk");
     expect(CONTACT_360_TABS).toContain("banks");
+    expect(CONTACT_360_TABS).toContain("assets");
     expect(CONTACT_360_TABS).toContain("timeline");
     for (const tab of CONTACT_360_TABS) {
       expect(isContact360Tab(tab)).toBe(true);

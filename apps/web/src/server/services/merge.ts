@@ -45,6 +45,7 @@ type MergeChildren = {
   riskScores: { id: string }[];
   incidents: { id: string }[];
   bankRelations: { id: string }[];
+  vehicles: { id: string }[];
 };
 
 export type MergePersonsParams = {
@@ -77,6 +78,7 @@ type EntityCounts = {
   riskScores: number;
   incidents: number;
   bankRelations: number;
+  vehicles: number;
 };
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -179,6 +181,7 @@ async function loadMergeChildren(
     riskScores,
     incidents,
     bankRelations,
+    vehicles,
   ] = await Promise.all([
     db.contactPoint.findMany({
       where: { personId, deletedAt: null },
@@ -211,6 +214,10 @@ async function loadMergeChildren(
       where: { personId, deletedAt: null },
       select: { id: true },
     }),
+    db.vehicle.findMany({
+      where: { personId, deletedAt: null },
+      select: { id: true },
+    }),
   ]);
   return {
     contactPoints,
@@ -222,6 +229,7 @@ async function loadMergeChildren(
     riskScores,
     incidents,
     bankRelations,
+    vehicles,
   };
 }
 
@@ -236,6 +244,7 @@ function countsFromChildren(kids: MergeChildren): EntityCounts {
     riskScores: kids.riskScores.length,
     incidents: kids.incidents.length,
     bankRelations: kids.bankRelations.length,
+    vehicles: kids.vehicles.length,
   };
 }
 
@@ -441,6 +450,7 @@ export async function mergePersons(
         riskScores: [] as string[],
         incidents: [] as string[],
         bankRelations: [] as string[],
+        vehicles: [] as string[],
       };
       const skippedPersonSourceReportIds: string[] = [];
       const mergedIntoExisting: Array<{
@@ -596,6 +606,15 @@ export async function mergePersons(
           data: { personId: targetPersonId },
         });
         movedEntityIds.bankRelations.push(...bankIds);
+      }
+
+      const vehicleIds = sourceKids.vehicles.map((r) => r.id);
+      if (vehicleIds.length > 0) {
+        await tx.vehicle.updateMany({
+          where: { id: { in: vehicleIds } },
+          data: { personId: targetPersonId },
+        });
+        movedEntityIds.vehicles.push(...vehicleIds);
       }
 
       const targetPsrByReport = new Set(

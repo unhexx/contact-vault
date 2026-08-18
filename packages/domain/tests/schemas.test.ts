@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AddressSchema } from "../src/address.js";
 import { BankRelationSchema } from "../src/bank-relation.js";
+import { VehicleSchema } from "../src/vehicle.js";
 import { ContactPointSchema } from "../src/contact-point.js";
 import { IdentityDocumentSchema } from "../src/identity-document.js";
 import { IncidentSchema } from "../src/incident.js";
@@ -122,6 +123,7 @@ describe("PersonDraft vs Person (KD5)", () => {
       expect(r.data.riskScores).toEqual([]);
       expect(r.data.incidents).toEqual([]);
       expect(r.data.bankRelations).toEqual([]);
+      expect(r.data.vehicles).toEqual([]);
     }
   });
 
@@ -171,9 +173,29 @@ describe("PersonDraft vs Person (KD5)", () => {
     }
   });
 
+  it("accepts vehicles on PersonDraft", () => {
+    const r = PersonDraftSchema.safeParse({
+      vehicles: [
+        {
+          brand: "ТестМарка",
+          plate: "А000АА77",
+          year: 2018,
+          extras: { color: "белый" },
+          provenance: [baseProv],
+        },
+      ],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.vehicles).toHaveLength(1);
+      expect(r.data.vehicles[0]?.brand).toBe("ТестМарка");
+      expect(r.data.vehicles[0]?.plate).toBe("А000АА77");
+    }
+  });
+
   it("rejects unknown keys on PersonDraft (strict)", () => {
     const r = PersonDraftSchema.safeParse({
-      vehicles: [],
+      spaceships: [],
     });
     expect(r.success).toBe(false);
   });
@@ -479,6 +501,47 @@ describe("BankRelationSchema", () => {
   it("requires at least one provenance entry", () => {
     const r = BankRelationSchema.safeParse({
       bankName: "ТестБанк",
+      provenance: [],
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe("VehicleSchema", () => {
+  it("accepts plate with provenance", () => {
+    const r = VehicleSchema.safeParse({
+      plate: "А000АА77",
+      provenance: [baseProv],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("trims brand and plate", () => {
+    const r = VehicleSchema.safeParse({
+      brand: "  ТестМарка  ",
+      plate: "  А000АА77  ",
+      provenance: [baseProv],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.brand).toBe("ТестМарка");
+      expect(r.data.plate).toBe("А000АА77");
+    }
+  });
+
+  it("rejects vehicle without plate, vin, brand, or model", () => {
+    expect(
+      VehicleSchema.safeParse({ year: 2018, provenance: [baseProv] }).success,
+    ).toBe(false);
+    expect(
+      VehicleSchema.safeParse({ extras: { color: "белый" }, provenance: [baseProv] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("requires at least one provenance entry", () => {
+    const r = VehicleSchema.safeParse({
+      brand: "ТестМарка",
       provenance: [],
     });
     expect(r.success).toBe(false);

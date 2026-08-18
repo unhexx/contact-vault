@@ -87,6 +87,7 @@ model Person {
   riskScores               RiskScore[]
   incidents                Incident[]
   bankRelations            BankRelation[]
+  vehicles                 Vehicle[]
   sourceReports            PersonSourceReport[]
   mergeSuggestionsAsTarget MergeSuggestion[]    @relation("SuggestionTarget")
   mergeSuggestionsAsNew    MergeSuggestion[]    @relation("SuggestionNew")
@@ -251,6 +252,29 @@ model BankRelation {
 
   @@index([personId])
   @@index([bankName])
+}
+
+model Vehicle {
+  id               String    @id @default(uuid()) @db.Uuid
+  personId         String    @db.Uuid
+  person           Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  brand            String?
+  model            String?
+  year             Int?
+  plate            String?
+  vin              String?
+  powerHp          Float?
+  engineVolumeCc   Float?
+  category         String?
+  ownershipPeriods Json?
+  extras           Json?
+  provenance       Json
+  createdAt        DateTime  @default(now())
+  deletedAt        DateTime?
+
+  @@index([personId])
+  @@index([plate])
+  @@index([vin])
 }
 
 model ReportImport {

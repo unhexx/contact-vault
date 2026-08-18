@@ -4,7 +4,7 @@ import type { NameVariant, Person } from "./person.js";
 
 /**
  * JSContact Card (RFC 9553 / RFC 9982 v2.0) — identity + contact points only.
- * Does not replace the Person domain model. Documents, risk, incidents, and banks stay out.
+ * Does not replace the Person domain model. Documents, risk, incidents, banks, and vehicles stay out.
  */
 
 export const JSCONTACT_VERSION = "2.0" as const;

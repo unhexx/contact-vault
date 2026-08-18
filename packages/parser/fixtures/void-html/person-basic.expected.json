@@ -11,5 +11,9 @@
   "relationshipFio": "Тестова Анна Тестовна",
   "hasUnmappedBanks": false,
   "bankName": "ТестБанк",
+  "hasUnmappedVehicles": false,
+  "vehicleBrand": "ТестМарка",
+  "vehiclePlate": "А000АА77",
+  "autoregBrand": "АвторегМарка",
   "reportQuery": "+79000000001"
 }

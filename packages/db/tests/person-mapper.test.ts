@@ -38,6 +38,7 @@ function row(
     riskScores: [],
     incidents: [],
     bankRelations: [],
+    vehicles: [],
     nameVariants: [
       {
         id: "11111111-2222-4333-8444-555555555555",

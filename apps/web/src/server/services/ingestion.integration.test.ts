@@ -529,6 +529,15 @@ Email: dismiss.other.${stamp}@example.com
             },
           ],
         },
+        vehicles: {
+          create: [
+            {
+              brand: "TargetМарка",
+              plate: "Т000ТТ00",
+              provenance: synthProv(reportA),
+            },
+          ],
+        },
         sourceReports: {
           create: {
             reportImportId: reportA,
@@ -604,6 +613,20 @@ Email: dismiss.other.${stamp}@example.com
             },
           ],
         },
+        vehicles: {
+          create: [
+            {
+              brand: "SourceМарка-1",
+              plate: "С111СС11",
+              provenance: synthProv(reportB),
+            },
+            {
+              brand: "SourceМарка-2",
+              vin: "XTA00000000000001",
+              provenance: synthProv(reportB),
+            },
+          ],
+        },
         sourceReports: {
           create: {
             reportImportId: reportB,
@@ -633,9 +656,16 @@ Email: dismiss.other.${stamp}@example.com
         select: { id: true },
       })
     ).map((r) => r.id);
+    const sourceVehicleIds = (
+      await prisma.vehicle.findMany({
+        where: { personId: source.id, deletedAt: null },
+        select: { id: true },
+      })
+    ).map((r) => r.id);
     expect(sourceRiskIds).toHaveLength(2);
     expect(sourceIncidentIds).toHaveLength(3);
     expect(sourceBankIds).toHaveLength(2);
+    expect(sourceVehicleIds).toHaveLength(2);
 
     const suggestion = await prisma.mergeSuggestion.create({
       data: {
@@ -651,9 +681,11 @@ Email: dismiss.other.${stamp}@example.com
     expect(preview.source.riskScores).toBe(2);
     expect(preview.source.incidents).toBe(3);
     expect(preview.source.bankRelations).toBe(2);
+    expect(preview.source.vehicles).toBe(2);
     expect(preview.target.riskScores).toBe(1);
     expect(preview.target.incidents).toBe(1);
     expect(preview.target.bankRelations).toBe(1);
+    expect(preview.target.vehicles).toBe(1);
 
     const merged = await mergePersons(prisma, {
       sourcePersonId: source.id,
@@ -678,9 +710,13 @@ Email: dismiss.other.${stamp}@example.com
     const targetBanks = await prisma.bankRelation.findMany({
       where: { personId: target.id, deletedAt: null },
     });
+    const targetVehicles = await prisma.vehicle.findMany({
+      where: { personId: target.id, deletedAt: null },
+    });
     expect(targetRisks).toHaveLength(1 + 2); // target kept + source moved
     expect(targetIncidents).toHaveLength(1 + 3);
     expect(targetBanks).toHaveLength(1 + 2);
+    expect(targetVehicles).toHaveLength(1 + 2);
 
     for (const id of sourceRiskIds) {
       expect(targetRisks.some((r) => r.id === id)).toBe(true);
@@ -690,6 +726,9 @@ Email: dismiss.other.${stamp}@example.com
     }
     for (const id of sourceBankIds) {
       expect(targetBanks.some((r) => r.id === id)).toBe(true);
+    }
+    for (const id of sourceVehicleIds) {
+      expect(targetVehicles.some((r) => r.id === id)).toBe(true);
     }
 
     // Source owns none
@@ -708,6 +747,11 @@ Email: dismiss.other.${stamp}@example.com
         where: { personId: source.id, deletedAt: null },
       }),
     ).toBe(0);
+    expect(
+      await prisma.vehicle.count({
+        where: { personId: source.id, deletedAt: null },
+      }),
+    ).toBe(0);
 
     // Audit payload records moved ids
     const audits = await prisma.auditLog.findMany({
@@ -721,6 +765,7 @@ Email: dismiss.other.${stamp}@example.com
         riskScores?: string[];
         incidents?: string[];
         bankRelations?: string[];
+        vehicles?: string[];
       };
     };
     expect(payload.movedEntityIds?.riskScores?.sort()).toEqual(
@@ -731,6 +776,9 @@ Email: dismiss.other.${stamp}@example.com
     );
     expect(payload.movedEntityIds?.bankRelations?.sort()).toEqual(
       [...sourceBankIds].sort(),
+    );
+    expect(payload.movedEntityIds?.vehicles?.sort()).toEqual(
+      [...sourceVehicleIds].sort(),
     );
   }, 60_000);
 

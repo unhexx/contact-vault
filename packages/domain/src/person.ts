@@ -7,6 +7,7 @@ import { IncidentSchema } from "./incident.js";
 import { ProvenanceSchema } from "./provenance.js";
 import { RelationshipSchema } from "./relationship.js";
 import { RiskScoreSchema } from "./risk-score.js";
+import { VehicleSchema } from "./vehicle.js";
 
 export const NameVariantSchema = z.object({
   full: z.string().min(1),
@@ -37,6 +38,7 @@ const personFields = {
   riskScores: z.array(RiskScoreSchema).default([]),
   incidents: z.array(IncidentSchema).default([]),
   bankRelations: z.array(BankRelationSchema).default([]),
+  vehicles: z.array(VehicleSchema).default([]),
   extras: z.record(z.unknown()).optional(),
 } as const;
 

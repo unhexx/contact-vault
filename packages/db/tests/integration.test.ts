@@ -439,6 +439,7 @@ describe.skipIf(!hasDb)("db integration", () => {
         riskScores: [],
         incidents: [],
         bankRelations: [],
+        vehicles: [],
       },
       {
         reportImportId: report.id,
@@ -957,6 +958,57 @@ describe.skipIf(!hasDb)("db integration", () => {
     expect(afterChildSoftDelete!.bankRelations).toEqual([]);
   });
 
+  it("createFromDraft + get360 round-trips vehicles", async () => {
+    const report = await ensureReportImport(ctx);
+    const p = prov(report.id, "vehicles");
+    const draft = {
+      ...draftPerson({ reportId: report.id, name: SYNTH.nameA, phone: SYNTH.phoneA }),
+      vehicles: [
+        {
+          brand: "ТестМарка",
+          model: "Модель-1",
+          year: 2018,
+          plate: "А000АА77",
+          vin: "XTA00000000000000",
+          extras: { color: "белый" },
+          provenance: p,
+        },
+      ],
+    };
+
+    const created = await ctx.persons.createFromDraft(draft, {
+      reportImportId: report.id,
+      contentHash: report.contentHash,
+      query: "vehicles-q",
+      mode: "void_html",
+    });
+
+    expect(created.vehicles).toHaveLength(1);
+    expect(created.vehicles[0]?.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    expect(created.vehicles[0]?.brand).toBe("ТестМарка");
+    expect(created.vehicles[0]?.model).toBe("Модель-1");
+    expect(created.vehicles[0]?.year).toBe(2018);
+    expect(created.vehicles[0]?.plate).toBe("А000АА77");
+    expect(created.vehicles[0]?.vin).toBe("XTA00000000000000");
+    expect(created.vehicles[0]?.extras).toEqual({ color: "белый" });
+    expect(created.vehicles[0]?.provenance.length).toBeGreaterThan(0);
+
+    const loaded = await ctx.persons.get360(created.id);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.vehicles).toHaveLength(1);
+    expect(loaded!.vehicles[0]?.id).toBe(created.vehicles[0]?.id);
+    expect(loaded!.vehicles[0]?.brand).toBe("ТестМарка");
+
+    await ctx.prisma.vehicle.update({
+      where: { id: created.vehicles[0]!.id! },
+      data: { deletedAt: new Date() },
+    });
+    const afterChildSoftDelete = await ctx.persons.get360(created.id);
+    expect(afterChildSoftDelete!.vehicles).toEqual([]);
+  });
+
   it("legacy person without risk/incident children maps empty arrays", async () => {
     const report = await ensureReportImport(ctx);
     const person = await ctx.persons.createFromDraft(
@@ -971,11 +1023,13 @@ describe.skipIf(!hasDb)("db integration", () => {
     expect(person.riskScores).toEqual([]);
     expect(person.incidents).toEqual([]);
     expect(person.bankRelations).toEqual([]);
+    expect(person.vehicles).toEqual([]);
 
     const loaded = await ctx.persons.get360(person.id);
     expect(loaded!.riskScores).toEqual([]);
     expect(loaded!.incidents).toEqual([]);
     expect(loaded!.bankRelations).toEqual([]);
+    expect(loaded!.vehicles).toEqual([]);
   });
 
   it("createFromDraft normalizes inline-dossier hyphen mode to underscore", async () => {

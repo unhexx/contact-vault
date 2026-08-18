@@ -27,6 +27,7 @@ function everyFactHasReportId(
     addresses: { provenance: { reportId: string }[] }[];
     relationships: { provenance: { reportId: string }[] }[];
     bankRelations?: { provenance: { reportId: string }[] }[];
+    vehicles?: { provenance: { reportId: string }[] }[];
     nameVariants: { provenance: { reportId: string }[] }[];
     canonicalName?: { provenance: { reportId: string }[] };
   },
@@ -38,6 +39,7 @@ function everyFactHasReportId(
     ...person.addresses,
     ...person.relationships,
     ...(person.bankRelations ?? []),
+    ...(person.vehicles ?? []),
     ...person.nameVariants,
     ...(person.canonicalName ? [person.canonicalName] : []),
   ];
@@ -97,8 +99,21 @@ describe("parseReport void-html", () => {
 
     expect(person.bankRelations).toHaveLength(1);
     expect(person.bankRelations[0]?.bankName).toBe("ТестБанк");
+    expect(person.vehicles).toHaveLength(2);
+    expect(person.vehicles[0]?.brand).toBe("ТестМарка");
+    expect(person.vehicles[0]?.plate).toBe("А000АА77");
+    expect(person.vehicles[0]?.year).toBe(2018);
+    expect(person.vehicles[0]?.extras).toEqual({ color: "белый" });
+    expect(person.vehicles[1]?.brand).toBe("АвторегМарка");
+    expect(person.vehicles[1]?.plate).toBe("В111ВВ199");
+    expect(person.vehicles[1]?.vin).toBe("XTA00000000000000");
     expect(
       result.warnings.some((w) => w.code === "UNMAPPED_SECTION" && w.key === "banks"),
+    ).toBe(false);
+    expect(
+      result.warnings.some(
+        (w) => w.code === "UNMAPPED_SECTION" && (w.key === "vehicles" || w.key === "autoregs"),
+      ),
     ).toBe(false);
 
     expect(everyFactHasReportId(person, REPORT_ID)).toBe(true);

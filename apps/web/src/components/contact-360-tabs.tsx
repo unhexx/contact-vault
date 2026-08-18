@@ -578,6 +578,127 @@ export function BanksTab({ person }: { person: Person }) {
   );
 }
 
+export function AssetsTab({ person }: { person: Person }) {
+  const vehicles = person.vehicles ?? [];
+
+  if (vehicles.length === 0) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <EmptyHint>No vehicles</EmptyHint>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Assets</CardTitle>
+        <CardDescription>
+          Vehicles and registrations from source reports
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-3">
+          {vehicles.map((v, i) => {
+            const title = [v.brand, v.model].filter(Boolean).join(" ");
+            return (
+              <li key={v.id ?? i} className="rounded-lg border p-3 text-sm">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  {title ? (
+                    <CopyField value={title} label="Vehicle" />
+                  ) : (
+                    <span className="text-muted-foreground">Vehicle</span>
+                  )}
+                  {v.year ? <Badge variant="outline">{v.year}</Badge> : null}
+                  {v.category ? (
+                    <Badge variant="secondary">{v.category}</Badge>
+                  ) : null}
+                  <SourceBadge provenance={v.provenance} />
+                </div>
+                <dl className="grid gap-1.5 sm:grid-cols-[120px_1fr]">
+                  {v.plate ? (
+                    <>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Plate
+                      </dt>
+                      <dd>
+                        <CopyField value={v.plate} label="Plate" mono />
+                      </dd>
+                    </>
+                  ) : null}
+                  {v.vin ? (
+                    <>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        VIN
+                      </dt>
+                      <dd>
+                        <CopyField value={v.vin} label="VIN" mono />
+                      </dd>
+                    </>
+                  ) : null}
+                  {v.powerHp != null ? (
+                    <>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Power
+                      </dt>
+                      <dd>{v.powerHp} hp</dd>
+                    </>
+                  ) : null}
+                  {v.engineVolumeCc != null ? (
+                    <>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Engine
+                      </dt>
+                      <dd>{v.engineVolumeCc} cc</dd>
+                    </>
+                  ) : null}
+                </dl>
+                {v.ownershipPeriods && v.ownershipPeriods.length > 0 ? (
+                  <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                    {v.ownershipPeriods.map((period, pi) => (
+                      <li key={pi}>
+                        {[
+                          period.from || period.to
+                            ? `${period.from ?? "?"} — ${period.to ?? "?"}`
+                            : null,
+                          period.ownerName,
+                          period.operationCode,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {v.extras && Object.keys(v.extras).length > 0 ? (
+                  <ul className="mt-2 space-y-1 rounded-md border bg-muted/20 px-2 py-1.5 text-xs text-muted-foreground">
+                    {Object.entries(v.extras).map(([key, value]) => (
+                      <li key={key} className="flex flex-wrap gap-1.5">
+                        <span className="font-medium">{key}:</span>
+                        <CopyField
+                          value={
+                            typeof value === "string"
+                              ? value
+                              : JSON.stringify(value)
+                          }
+                          label={`Vehicle extra ${key}`}
+                          className="text-xs text-muted-foreground"
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function RiskTab({ person }: { person: Person }) {
   const riskScores = person.riskScores ?? [];
   const incidents = person.incidents ?? [];
