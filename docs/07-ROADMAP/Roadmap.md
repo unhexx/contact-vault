@@ -80,7 +80,7 @@ CDD / FATF Rec. 10 / FinCEN CDD order after identity is already shipped: underst
 
 - [x] BankRelation domain + void-html `data.banks` collector + persist + Contact 360 **Banks** tab (first increment).
 - [x] Vehicles first-class + void-html `vehicles` / `autoregs` collector + 360 Assets tab (no photo pipeline).
-- [ ] Employment / FinancialFact promotion from extras + 360 tab.
+- [x] Employment / FinancialFact promotion from extras + 360 Work tab.
 
 ## Later
 

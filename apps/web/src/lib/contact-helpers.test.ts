@@ -18,6 +18,7 @@ describe("contact-helpers", () => {
     expect(CONTACT_360_TABS).toContain("risk");
     expect(CONTACT_360_TABS).toContain("banks");
     expect(CONTACT_360_TABS).toContain("assets");
+    expect(CONTACT_360_TABS).toContain("work");
     expect(CONTACT_360_TABS).toContain("timeline");
     for (const tab of CONTACT_360_TABS) {
       expect(isContact360Tab(tab)).toBe(true);

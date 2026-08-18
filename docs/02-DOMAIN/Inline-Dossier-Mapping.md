@@ -37,7 +37,7 @@ Records are primarily **inline key-value** sequences. The source name is typical
 
 ```
 1. Extract scoring header → RiskScore / ScoringResult
-2. Extract ====\u0414\u043e\u0445\u043e\u0434\u044b==== block → FinancialFact[] / Employment income
+2. Extract ====\u0414\u043e\u0445\u043e\u0434\u044b==== block → first-class FinancialFact[] (+ Employment when employer is present)
 3. Extract ====\u0410\u0434\u0440\u0435\u0441\u0430==== block → Address[] (aggressive split on known region/city patterns)
 4. Split body into records on /(?:={3,}\\s*)?\u0418\u043c\u044f\\s*:/
 5. For each record:
@@ -89,7 +89,7 @@ Unknown keys → `extras` / meta (never drop).
 |----------------|---------------|
 | Scoring header (score, categories, articles) | **RiskScore** + Incident[] for each article |
 | \u0421\u0443\u0434\u0438\u043c\u043e\u0441\u0442\u0438 / \u041a\u0420\u0418\u041c\u0418\u041d\u0410\u041b / \u0424\u0421\u041a\u041d / \u043f\u0440\u0438\u0433\u043e\u0432\u043e\u0440 | **Incident** (severity=high) |
-| \u0414\u043e\u0445\u043e\u0434\u044b / \u0414\u041e\u0425\u041e\u0414\u042b \u0424\u041b | FinancialFact + Employment |
+| \u0414\u043e\u0445\u043e\u0434\u044b / \u0414\u041e\u0425\u041e\u0414\u042b \u0424\u041b | FinancialFact + Employment (first-class, not extras) |
 | \u0410\u0434\u0440\u0435\u0441\u0430 blob + per-record addresses | Address[] |
 | \u0420\u041e\u0421\u0420\u0415\u0415\u0421\u0422\u0420 / \u043f\u0430\u0441\u043f\u043e\u0440\u0442\u043d\u044b\u0435 \u0434\u0430\u043d\u043d\u044b\u0435 | IdentityDocument (passport_ru) |
 | \u0412\u043e\u0435\u043d\u043d\u044b\u0439 \u0431\u0438\u043b\u0435\u0442 | IdentityDocument (military) |

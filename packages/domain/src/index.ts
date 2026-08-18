@@ -48,6 +48,13 @@ export {
   type VehicleOwnershipPeriod,
 } from "./vehicle.js";
 
+// Employment / financial fact (v0.3)
+export { EmploymentSchema, type Employment } from "./employment.js";
+export {
+  FinancialFactSchema,
+  type FinancialFact,
+} from "./financial-fact.js";
+
 // Person draft vs person (KD5)
 export {
   NameVariantSchema,

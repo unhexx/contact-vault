@@ -63,6 +63,7 @@ export const CONTACT_360_TABS = [
   "network",
   "banks",
   "assets",
+  "work",
   "risk",
   "sources",
   "timeline",

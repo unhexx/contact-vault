@@ -260,6 +260,8 @@ export function mapSectionsToDomain(
     incidents: [],
     bankRelations: [],
     vehicles: [],
+    employments: acc.employments,
+    financialFacts: acc.financialFacts,
   };
   if (acc.canonicalName) person.canonicalName = acc.canonicalName;
   if (acc.dateOfBirth) person.dateOfBirth = acc.dateOfBirth;

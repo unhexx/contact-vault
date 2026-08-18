@@ -440,6 +440,8 @@ describe.skipIf(!hasDb)("db integration", () => {
         incidents: [],
         bankRelations: [],
         vehicles: [],
+        employments: [],
+        financialFacts: [],
       },
       {
         reportImportId: report.id,
@@ -1009,6 +1011,71 @@ describe.skipIf(!hasDb)("db integration", () => {
     expect(afterChildSoftDelete!.vehicles).toEqual([]);
   });
 
+  it("createFromDraft + get360 round-trips employments and financialFacts", async () => {
+    const report = await ensureReportImport(ctx);
+    const p = prov(report.id, "work");
+    const created = await ctx.persons.createFromDraft(
+      {
+        ...draftPerson({ reportId: report.id, name: SYNTH.nameA }),
+        employments: [
+          {
+            employer: "ООО ТестРабота",
+            position: "Инженер",
+            periodFrom: "2020",
+            extras: { inn: "0000000000" },
+            provenance: p,
+          },
+        ],
+        financialFacts: [
+          {
+            amount: "450000",
+            year: "2022",
+            kind: "salary",
+            extras: { note: "synthetic" },
+            provenance: p,
+          },
+        ],
+      },
+      {
+        reportImportId: report.id,
+        contentHash: report.contentHash,
+        query: "work-q",
+        mode: "void_html",
+      },
+    );
+    expect(created.employments).toHaveLength(1);
+    expect(created.employments[0]?.id).toMatch(
+      /^[0-9a-f-]{36}$/i,
+    );
+    expect(created.employments[0]?.employer).toBe("ООО ТестРабота");
+    expect(created.employments[0]?.position).toBe("Инженер");
+    expect(created.employments[0]?.periodFrom).toBe("2020");
+    expect(created.employments[0]?.extras).toEqual({ inn: "0000000000" });
+    expect(created.financialFacts).toHaveLength(1);
+    expect(created.financialFacts[0]?.amount).toBe("450000");
+    expect(created.financialFacts[0]?.year).toBe("2022");
+    expect(created.financialFacts[0]?.kind).toBe("salary");
+    expect(created.financialFacts[0]?.extras).toEqual({ note: "synthetic" });
+
+    const loaded = await ctx.persons.get360(created.id);
+    expect(loaded!.employments).toHaveLength(1);
+    expect(loaded!.employments[0]?.id).toBe(created.employments[0]?.id);
+    expect(loaded!.financialFacts).toHaveLength(1);
+    expect(loaded!.financialFacts[0]?.amount).toBe("450000");
+
+    await ctx.prisma.employment.update({
+      where: { id: created.employments[0]!.id! },
+      data: { deletedAt: new Date() },
+    });
+    await ctx.prisma.financialFact.update({
+      where: { id: created.financialFacts[0]!.id! },
+      data: { deletedAt: new Date() },
+    });
+    const afterChildSoftDelete = await ctx.persons.get360(created.id);
+    expect(afterChildSoftDelete!.employments).toEqual([]);
+    expect(afterChildSoftDelete!.financialFacts).toEqual([]);
+  });
+
   it("legacy person without risk/incident children maps empty arrays", async () => {
     const report = await ensureReportImport(ctx);
     const person = await ctx.persons.createFromDraft(
@@ -1024,12 +1091,16 @@ describe.skipIf(!hasDb)("db integration", () => {
     expect(person.incidents).toEqual([]);
     expect(person.bankRelations).toEqual([]);
     expect(person.vehicles).toEqual([]);
+    expect(person.employments).toEqual([]);
+    expect(person.financialFacts).toEqual([]);
 
     const loaded = await ctx.persons.get360(person.id);
     expect(loaded!.riskScores).toEqual([]);
     expect(loaded!.incidents).toEqual([]);
     expect(loaded!.bankRelations).toEqual([]);
     expect(loaded!.vehicles).toEqual([]);
+    expect(loaded!.employments).toEqual([]);
+    expect(loaded!.financialFacts).toEqual([]);
   });
 
   it("createFromDraft normalizes inline-dossier hyphen mode to underscore", async () => {

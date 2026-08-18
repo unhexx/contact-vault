@@ -46,6 +46,8 @@ type MergeChildren = {
   incidents: { id: string }[];
   bankRelations: { id: string }[];
   vehicles: { id: string }[];
+  employments: { id: string }[];
+  financialFacts: { id: string }[];
 };
 
 export type MergePersonsParams = {
@@ -79,6 +81,8 @@ type EntityCounts = {
   incidents: number;
   bankRelations: number;
   vehicles: number;
+  employments: number;
+  financialFacts: number;
 };
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -182,6 +186,8 @@ async function loadMergeChildren(
     incidents,
     bankRelations,
     vehicles,
+    employments,
+    financialFacts,
   ] = await Promise.all([
     db.contactPoint.findMany({
       where: { personId, deletedAt: null },
@@ -218,6 +224,14 @@ async function loadMergeChildren(
       where: { personId, deletedAt: null },
       select: { id: true },
     }),
+    db.employment.findMany({
+      where: { personId, deletedAt: null },
+      select: { id: true },
+    }),
+    db.financialFact.findMany({
+      where: { personId, deletedAt: null },
+      select: { id: true },
+    }),
   ]);
   return {
     contactPoints,
@@ -230,6 +244,8 @@ async function loadMergeChildren(
     incidents,
     bankRelations,
     vehicles,
+    employments,
+    financialFacts,
   };
 }
 
@@ -245,6 +261,8 @@ function countsFromChildren(kids: MergeChildren): EntityCounts {
     incidents: kids.incidents.length,
     bankRelations: kids.bankRelations.length,
     vehicles: kids.vehicles.length,
+    employments: kids.employments.length,
+    financialFacts: kids.financialFacts.length,
   };
 }
 
@@ -451,6 +469,8 @@ export async function mergePersons(
         incidents: [] as string[],
         bankRelations: [] as string[],
         vehicles: [] as string[],
+        employments: [] as string[],
+        financialFacts: [] as string[],
       };
       const skippedPersonSourceReportIds: string[] = [];
       const mergedIntoExisting: Array<{
@@ -615,6 +635,24 @@ export async function mergePersons(
           data: { personId: targetPersonId },
         });
         movedEntityIds.vehicles.push(...vehicleIds);
+      }
+
+      const employmentIds = sourceKids.employments.map((r) => r.id);
+      if (employmentIds.length > 0) {
+        await tx.employment.updateMany({
+          where: { id: { in: employmentIds } },
+          data: { personId: targetPersonId },
+        });
+        movedEntityIds.employments.push(...employmentIds);
+      }
+
+      const financialFactIds = sourceKids.financialFacts.map((r) => r.id);
+      if (financialFactIds.length > 0) {
+        await tx.financialFact.updateMany({
+          where: { id: { in: financialFactIds } },
+          data: { personId: targetPersonId },
+        });
+        movedEntityIds.financialFacts.push(...financialFactIds);
       }
 
       const targetPsrByReport = new Set(

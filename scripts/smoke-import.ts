@@ -138,9 +138,25 @@ async function main(): Promise<void> {
       viewVoid.vehicles.some((v) => v.brand === "ТестМарка"),
       "void-html vehicle brand must be ТестМарка",
     );
+    assert(
+      (viewVoid.employments?.length ?? 0) >= 1,
+      "void-html get360 must include Employment from data.work",
+    );
+    assert(
+      viewVoid.employments.some((e) => e.employer === "ООО ТестРабота"),
+      "void-html employer must be ООО ТестРабота",
+    );
+    assert(
+      (viewVoid.financialFacts?.length ?? 0) >= 1,
+      "void-html get360 must include FinancialFact from data.finance",
+    );
+    assert(
+      viewVoid.financialFacts.some((f) => f.amount === "450000"),
+      "void-html finance amount must be 450000",
+    );
     log(
       "2 import void-html",
-      `person=${r2.personIds[0]!.slice(0, 8)}… format=${r2.format} banks=${viewVoid.bankRelations.length} vehicles=${viewVoid.vehicles.length}`,
+      `person=${r2.personIds[0]!.slice(0, 8)}… format=${r2.format} banks=${viewVoid.bankRelations.length} vehicles=${viewVoid.vehicles.length} work=${viewVoid.employments.length} finance=${viewVoid.financialFacts.length}`,
     );
 
     // --- 3. inline-dossier import (scoring → riskScores + incidents on get360) ---

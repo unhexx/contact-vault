@@ -15,5 +15,9 @@
   "vehicleBrand": "ТестМарка",
   "vehiclePlate": "А000АА77",
   "autoregBrand": "АвторегМарка",
+  "hasUnmappedWork": false,
+  "employer": "ООО ТестРабота",
+  "hasUnmappedFinance": false,
+  "financeAmount": "450000",
   "reportQuery": "+79000000001"
 }

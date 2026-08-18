@@ -2,6 +2,8 @@ import { z } from "zod";
 import { AddressSchema } from "./address.js";
 import { BankRelationSchema } from "./bank-relation.js";
 import { ContactPointSchema } from "./contact-point.js";
+import { EmploymentSchema } from "./employment.js";
+import { FinancialFactSchema } from "./financial-fact.js";
 import { IdentityDocumentSchema } from "./identity-document.js";
 import { IncidentSchema } from "./incident.js";
 import { ProvenanceSchema } from "./provenance.js";
@@ -39,6 +41,8 @@ const personFields = {
   incidents: z.array(IncidentSchema).default([]),
   bankRelations: z.array(BankRelationSchema).default([]),
   vehicles: z.array(VehicleSchema).default([]),
+  employments: z.array(EmploymentSchema).default([]),
+  financialFacts: z.array(FinancialFactSchema).default([]),
   extras: z.record(z.unknown()).optional(),
 } as const;
 

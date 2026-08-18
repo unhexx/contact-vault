@@ -28,6 +28,8 @@ function everyFactHasReportId(
     relationships: { provenance: { reportId: string }[] }[];
     bankRelations?: { provenance: { reportId: string }[] }[];
     vehicles?: { provenance: { reportId: string }[] }[];
+    employments?: { provenance: { reportId: string }[] }[];
+    financialFacts?: { provenance: { reportId: string }[] }[];
     nameVariants: { provenance: { reportId: string }[] }[];
     canonicalName?: { provenance: { reportId: string }[] };
   },
@@ -40,6 +42,8 @@ function everyFactHasReportId(
     ...person.relationships,
     ...(person.bankRelations ?? []),
     ...(person.vehicles ?? []),
+    ...(person.employments ?? []),
+    ...(person.financialFacts ?? []),
     ...person.nameVariants,
     ...(person.canonicalName ? [person.canonicalName] : []),
   ];
@@ -113,6 +117,24 @@ describe("parseReport void-html", () => {
     expect(
       result.warnings.some(
         (w) => w.code === "UNMAPPED_SECTION" && (w.key === "vehicles" || w.key === "autoregs"),
+      ),
+    ).toBe(false);
+    expect(person.employments).toHaveLength(2);
+    expect(person.employments[0]?.employer).toBe("ООО ТестРабота");
+    expect(person.employments[0]?.position).toBe("Инженер");
+    expect(person.employments[0]?.periodFrom).toBe("2020");
+    expect(person.employments[1]?.employer).toBe("АО ТестКомпания");
+    expect(person.employments[1]?.position).toBe("Консультант");
+    expect(person.financialFacts).toHaveLength(1);
+    expect(person.financialFacts[0]?.amount).toBe("450000");
+    expect(person.financialFacts[0]?.year).toBe("2022");
+    expect(person.financialFacts[0]?.kind).toBe("salary");
+    expect(person.financialFacts[0]?.extras).toEqual({ note: "synthetic" });
+    expect(
+      result.warnings.some(
+        (w) =>
+          w.code === "UNMAPPED_SECTION" &&
+          (w.key === "work" || w.key === "companies" || w.key === "finance"),
       ),
     ).toBe(false);
 

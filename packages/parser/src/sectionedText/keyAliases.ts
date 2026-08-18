@@ -20,6 +20,10 @@ export type DomainTarget =
   | "address"
   | "telegram"
   | "max_id"
+  | "employer"
+  | "position"
+  | "wish"
+  | "income"
   | "unknown";
 
 /** Normalize key for lookup: trim, lower, collapse spaces, strip parentheticals lightly. */
@@ -64,6 +68,14 @@ const ALIASES: Array<{ match: RegExp | string; target: DomainTarget }> = [
   { match: "telegram", target: "telegram" },
   { match: "логин", target: "telegram" },
   { match: "max id", target: "max_id" },
+  { match: "место работы", target: "employer" },
+  { match: "предыдущая работа", target: "employer" },
+  { match: "организация", target: "employer" },
+  { match: "работодатель", target: "employer" },
+  { match: "должность", target: "position" },
+  { match: "желаемая должность", target: "wish" },
+  { match: "доход", target: "income" },
+  { match: "зарплата", target: "income" },
 ];
 
 export function resolveKeyAlias(key: string): DomainTarget {

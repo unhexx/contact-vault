@@ -16,6 +16,7 @@ import {
   RiskTab,
   SourcesTab,
   TimelineTab,
+  WorkTab,
 } from "@/components/contact-360-tabs";
 import {
   MergeSuggestionCard,
@@ -161,6 +162,7 @@ export function Contact360({ personId }: { personId: string }) {
           <TabsTrigger value="network">Network</TabsTrigger>
           <TabsTrigger value="banks">Banks</TabsTrigger>
           <TabsTrigger value="assets">Assets</TabsTrigger>
+          <TabsTrigger value="work">Work</TabsTrigger>
           <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="sources">Sources</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
@@ -186,6 +188,9 @@ export function Contact360({ personId }: { personId: string }) {
         </TabsContent>
         <TabsContent value="assets">
           <AssetsTab person={person} />
+        </TabsContent>
+        <TabsContent value="work">
+          <WorkTab person={person} />
         </TabsContent>
         <TabsContent value="risk">
           <RiskTab person={person} />

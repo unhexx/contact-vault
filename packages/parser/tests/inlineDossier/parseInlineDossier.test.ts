@@ -263,14 +263,21 @@ describe("parseReport inline-dossier", () => {
       ),
     ).toBe(true);
 
-    // financialFacts in extras (from ====Доходы==== lean rows only)
+    // financialFacts first-class (from ====Доходы==== lean rows)
+    expect((person.financialFacts ?? []).length).toBeGreaterThanOrEqual(1);
     expect(
-      Array.isArray(person.extras?.financialFacts) &&
-        (person.extras!.financialFacts as unknown[]).length >= 1,
+      person.extras &&
+        Array.isArray((person.extras as { financialFacts?: unknown }).financialFacts),
+    ).toBeFalsy();
+    expect(
+      person.financialFacts.every((f) => !/ИсточникТест/i.test(f.raw ?? "")),
     ).toBe(true);
-    // No source-label income junk
-    const facts = person.extras!.financialFacts as Array<{ raw?: string }>;
-    expect(facts.every((f) => !/ИсточникТест/i.test(f.raw ?? ""))).toBe(true);
+    expect(
+      person.financialFacts.some((f) => f.employer?.includes("ТестСтрой")),
+    ).toBe(true);
+    expect(
+      person.employments.some((e) => e.employer?.includes("ТестСтрой")),
+    ).toBe(true);
 
     expect(everyFactHasReportId(person, REPORT_ID)).toBe(true);
 

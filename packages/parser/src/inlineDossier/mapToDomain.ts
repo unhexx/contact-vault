@@ -1,10 +1,13 @@
 import type {
   Address,
   ContactPoint,
+  Employment,
+  FinancialFact,
   IdentityDocument,
   Incident,
   NameVariant,
   PersonDraft,
+  Provenance,
   Relationship,
   RiskScore,
 } from "@contact-vault/domain";
@@ -47,6 +50,8 @@ type Accumulator = {
   nameVariants: NameVariant[];
   riskScores: RiskScore[];
   incidents: Incident[];
+  employments: Employment[];
+  financialFacts: FinancialFact[];
   canonicalName?: NameVariant;
   dateOfBirth?: string;
   placeOfBirth?: string;
@@ -72,6 +77,8 @@ function emptyAcc(): Accumulator {
     nameVariants: [],
     riskScores: [],
     incidents: [],
+    employments: [],
+    financialFacts: [],
     extras: {},
     passportDraft: {},
   };
@@ -266,6 +273,23 @@ function pushExtras(
   const arr = (acc.extras[bag] as Array<Record<string, string>> | undefined) ?? [];
   arr.push({ key, value });
   acc.extras[bag] = arr;
+}
+
+function pushEmploymentField(
+  acc: Accumulator,
+  field: "employer" | "position" | "wish",
+  value: string,
+  provenance: Provenance[],
+): void {
+  const last = acc.employments[acc.employments.length - 1];
+  if (last && !last[field]) {
+    last[field] = value;
+    return;
+  }
+  acc.employments.push({
+    [field]: value,
+    provenance,
+  });
 }
 
 function applyPair(
@@ -551,10 +575,42 @@ function applyPair(
       break;
     }
     case "employer":
-    case "position":
+    case "position": {
+      if (asRelatedOnly) return;
+      pushEmploymentField(
+        acc,
+        target === "employer" ? "employer" : "position",
+        v,
+        [
+          makeProvenance({
+            reportId: ctx.reportId,
+            reportQuery: ctx.reportQuery,
+            sourceName,
+            section,
+            originalKey: key,
+            originalValue: v,
+            extractedAt: ctx.extractedAt,
+          }),
+        ],
+      );
+      break;
+    }
     case "income": {
       if (asRelatedOnly) return;
-      pushExtras(acc, key, v, "employments");
+      acc.financialFacts.push({
+        amount: v,
+        provenance: [
+          makeProvenance({
+            reportId: ctx.reportId,
+            reportQuery: ctx.reportQuery,
+            sourceName,
+            section,
+            originalKey: key,
+            originalValue: v,
+            extractedAt: ctx.extractedAt,
+          }),
+        ],
+      });
       break;
     }
     case "vehicle_plate":
@@ -814,27 +870,35 @@ export function mapInlineToDomain(
     });
   }
 
-  // Incomes → extras.financialFacts
+  // ====Доходы==== → first-class FinancialFact (+ Employment when employer present)
   if (blocks.incomesRaw) {
     const facts: LeanFinancialFact[] = parseIncomesBlock(blocks.incomesRaw);
-    const existing =
-      (acc.extras.financialFacts as Array<Record<string, unknown>>) ?? [];
     for (const f of facts) {
-      existing.push({
-        ...f,
-        provenance: [
-          makeProvenance({
-            reportId: mapCtx.reportId,
-            reportQuery: mapCtx.reportQuery,
-            sourceName: "Доходы",
-            section: "====Доходы====",
-            originalValue: f.raw,
-            extractedAt: mapCtx.extractedAt,
-          }),
-        ],
-      });
+      const provenance = [
+        makeProvenance({
+          reportId: mapCtx.reportId,
+          reportQuery: mapCtx.reportQuery,
+          sourceName: "Доходы",
+          section: "====Доходы====",
+          originalValue: f.raw,
+          extractedAt: mapCtx.extractedAt,
+        }),
+      ];
+      if (f.amount || f.raw || f.employer) {
+        const fact: FinancialFact = { provenance };
+        if (f.amount) fact.amount = f.amount;
+        if (f.year) fact.year = f.year;
+        if (f.employer) fact.employer = f.employer;
+        if (f.raw) fact.raw = f.raw;
+        acc.financialFacts.push(fact);
+      }
+      if (f.employer) {
+        acc.employments.push({
+          employer: f.employer,
+          provenance,
+        });
+      }
     }
-    if (existing.length) acc.extras.financialFacts = existing;
   }
 
   // Addresses block
@@ -907,6 +971,8 @@ export function mapInlineToDomain(
     incidents: acc.incidents,
     bankRelations: [],
     vehicles: [],
+    employments: acc.employments,
+    financialFacts: acc.financialFacts,
   };
   if (acc.canonicalName) person.canonicalName = acc.canonicalName;
   if (acc.dateOfBirth) person.dateOfBirth = acc.dateOfBirth;

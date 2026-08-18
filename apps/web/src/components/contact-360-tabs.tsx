@@ -699,6 +699,162 @@ export function AssetsTab({ person }: { person: Person }) {
   );
 }
 
+export function WorkTab({ person }: { person: Person }) {
+  const employments = person.employments ?? [];
+  const facts = person.financialFacts ?? [];
+
+  if (employments.length === 0 && facts.length === 0) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <EmptyHint>No employment or income facts</EmptyHint>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Employment</CardTitle>
+          <CardDescription>
+            Workplaces and positions from source reports
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {employments.length === 0 ? (
+            <EmptyHint>No employments</EmptyHint>
+          ) : (
+            <ul className="space-y-3">
+              {employments.map((e, i) => {
+                const title = [e.employer, e.position].filter(Boolean).join(" · ");
+                return (
+                  <li key={e.id ?? i} className="rounded-lg border p-3 text-sm">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      {title ? (
+                        <CopyField value={title} label="Employment" />
+                      ) : (
+                        <span className="text-muted-foreground">Employment</span>
+                      )}
+                      {e.wish ? (
+                        <Badge variant="outline">wish: {e.wish}</Badge>
+                      ) : null}
+                      <SourceBadge provenance={e.provenance} />
+                    </div>
+                    {e.periodFrom || e.periodTo ? (
+                      <p className="text-xs text-muted-foreground">
+                        {e.periodFrom ?? "?"} — {e.periodTo ?? "?"}
+                      </p>
+                    ) : null}
+                    {e.extras && Object.keys(e.extras).length > 0 ? (
+                      <ul className="mt-2 space-y-1 rounded-md border bg-muted/20 px-2 py-1.5 text-xs text-muted-foreground">
+                        {Object.entries(e.extras).map(([key, value]) => (
+                          <li key={key} className="flex flex-wrap gap-1.5">
+                            <span className="font-medium">{key}:</span>
+                            <CopyField
+                              value={
+                                typeof value === "string"
+                                  ? value
+                                  : JSON.stringify(value)
+                              }
+                              label={`Employment extra ${key}`}
+                              className="text-xs text-muted-foreground"
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Income</CardTitle>
+          <CardDescription>
+            Financial facts as observed (no invented currency)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {facts.length === 0 ? (
+            <EmptyHint>No financial facts</EmptyHint>
+          ) : (
+            <ul className="space-y-3">
+              {facts.map((f, i) => {
+                const title = f.amount ?? f.raw ?? f.employer ?? "Income";
+                return (
+                  <li key={f.id ?? i} className="rounded-lg border p-3 text-sm">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <CopyField value={title} label="Income" />
+                      {f.year ? <Badge variant="outline">{f.year}</Badge> : null}
+                      {f.kind ? (
+                        <Badge variant="secondary">{f.kind}</Badge>
+                      ) : null}
+                      <SourceBadge provenance={f.provenance} />
+                    </div>
+                    <dl className="grid gap-1.5 sm:grid-cols-[120px_1fr]">
+                      {f.employer ? (
+                        <>
+                          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Employer
+                          </dt>
+                          <dd>
+                            <CopyField value={f.employer} label="Employer" />
+                          </dd>
+                        </>
+                      ) : null}
+                      {f.currency ? (
+                        <>
+                          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Currency
+                          </dt>
+                          <dd>{f.currency}</dd>
+                        </>
+                      ) : null}
+                      {f.raw && f.raw !== f.amount ? (
+                        <>
+                          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Raw
+                          </dt>
+                          <dd>
+                            <CopyField value={f.raw} label="Raw income" />
+                          </dd>
+                        </>
+                      ) : null}
+                    </dl>
+                    {f.extras && Object.keys(f.extras).length > 0 ? (
+                      <ul className="mt-2 space-y-1 rounded-md border bg-muted/20 px-2 py-1.5 text-xs text-muted-foreground">
+                        {Object.entries(f.extras).map(([key, value]) => (
+                          <li key={key} className="flex flex-wrap gap-1.5">
+                            <span className="font-medium">{key}:</span>
+                            <CopyField
+                              value={
+                                typeof value === "string"
+                                  ? value
+                                  : JSON.stringify(value)
+                              }
+                              label={`Finance extra ${key}`}
+                              className="text-xs text-muted-foreground"
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export function RiskTab({ person }: { person: Person }) {
   const riskScores = person.riskScores ?? [];
   const incidents = person.incidents ?? [];

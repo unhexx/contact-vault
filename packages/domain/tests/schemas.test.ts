@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { AddressSchema } from "../src/address.js";
 import { BankRelationSchema } from "../src/bank-relation.js";
+import { EmploymentSchema } from "../src/employment.js";
+import { FinancialFactSchema } from "../src/financial-fact.js";
 import { VehicleSchema } from "../src/vehicle.js";
 import { ContactPointSchema } from "../src/contact-point.js";
 import { IdentityDocumentSchema } from "../src/identity-document.js";
@@ -124,6 +126,8 @@ describe("PersonDraft vs Person (KD5)", () => {
       expect(r.data.incidents).toEqual([]);
       expect(r.data.bankRelations).toEqual([]);
       expect(r.data.vehicles).toEqual([]);
+      expect(r.data.employments).toEqual([]);
+      expect(r.data.financialFacts).toEqual([]);
     }
   });
 
@@ -190,6 +194,32 @@ describe("PersonDraft vs Person (KD5)", () => {
       expect(r.data.vehicles).toHaveLength(1);
       expect(r.data.vehicles[0]?.brand).toBe("ТестМарка");
       expect(r.data.vehicles[0]?.plate).toBe("А000АА77");
+    }
+  });
+
+  it("accepts employments and financialFacts on PersonDraft", () => {
+    const r = PersonDraftSchema.safeParse({
+      employments: [
+        {
+          employer: "ООО ТестРабота",
+          position: "Инженер",
+          provenance: [baseProv],
+        },
+      ],
+      financialFacts: [
+        {
+          amount: "450000",
+          year: "2022",
+          provenance: [baseProv],
+        },
+      ],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.employments).toHaveLength(1);
+      expect(r.data.employments[0]?.employer).toBe("ООО ТестРабота");
+      expect(r.data.financialFacts).toHaveLength(1);
+      expect(r.data.financialFacts[0]?.amount).toBe("450000");
     }
   });
 
@@ -542,6 +572,86 @@ describe("VehicleSchema", () => {
   it("requires at least one provenance entry", () => {
     const r = VehicleSchema.safeParse({
       brand: "ТестМарка",
+      provenance: [],
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe("EmploymentSchema", () => {
+  it("accepts employer with provenance", () => {
+    const r = EmploymentSchema.safeParse({
+      employer: "ООО ТестРабота",
+      provenance: [baseProv],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("trims employer and position", () => {
+    const r = EmploymentSchema.safeParse({
+      employer: "  ООО ТестРабота  ",
+      position: "  Инженер  ",
+      provenance: [baseProv],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.employer).toBe("ООО ТестРабота");
+      expect(r.data.position).toBe("Инженер");
+    }
+  });
+
+  it("rejects employment without employer or position", () => {
+    expect(
+      EmploymentSchema.safeParse({ wish: "CEO", provenance: [baseProv] })
+        .success,
+    ).toBe(false);
+    expect(
+      EmploymentSchema.safeParse({ extras: { note: "x" }, provenance: [baseProv] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("requires at least one provenance entry", () => {
+    const r = EmploymentSchema.safeParse({
+      employer: "ООО ТестРабота",
+      provenance: [],
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe("FinancialFactSchema", () => {
+  it("accepts amount with provenance", () => {
+    const r = FinancialFactSchema.safeParse({
+      amount: "450000",
+      provenance: [baseProv],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("trims amount and keeps it a string", () => {
+    const r = FinancialFactSchema.safeParse({
+      amount: "  450000  ",
+      year: "  2022  ",
+      provenance: [baseProv],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.amount).toBe("450000");
+      expect(r.data.year).toBe("2022");
+    }
+  });
+
+  it("rejects fact without amount, raw, or employer", () => {
+    expect(
+      FinancialFactSchema.safeParse({ year: "2022", provenance: [baseProv] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("requires at least one provenance entry", () => {
+    const r = FinancialFactSchema.safeParse({
+      amount: "450000",
       provenance: [],
     });
     expect(r.success).toBe(false);

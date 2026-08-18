@@ -88,6 +88,8 @@ model Person {
   incidents                Incident[]
   bankRelations            BankRelation[]
   vehicles                 Vehicle[]
+  employments              Employment[]
+  financialFacts           FinancialFact[]
   sourceReports            PersonSourceReport[]
   mergeSuggestionsAsTarget MergeSuggestion[]    @relation("SuggestionTarget")
   mergeSuggestionsAsNew    MergeSuggestion[]    @relation("SuggestionNew")
@@ -275,6 +277,42 @@ model Vehicle {
   @@index([personId])
   @@index([plate])
   @@index([vin])
+}
+
+model Employment {
+  id         String    @id @default(uuid()) @db.Uuid
+  personId   String    @db.Uuid
+  person     Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  employer   String?
+  position   String?
+  wish       String?
+  periodFrom String?
+  periodTo   String?
+  extras     Json?
+  provenance Json
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  @@index([personId])
+  @@index([employer])
+}
+
+model FinancialFact {
+  id         String    @id @default(uuid()) @db.Uuid
+  personId   String    @db.Uuid
+  person     Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  amount     String?
+  currency   String?
+  year       String?
+  kind       String?
+  employer   String?
+  raw        String?
+  extras     Json?
+  provenance Json
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  @@index([personId])
 }
 
 model ReportImport {

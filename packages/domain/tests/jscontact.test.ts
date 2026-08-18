@@ -30,6 +30,8 @@ function person(overrides: Partial<Person> = {}): Person {
     incidents: [],
     bankRelations: [],
     vehicles: [],
+    employments: [],
+    financialFacts: [],
     sourceReports: [],
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -181,7 +183,7 @@ describe("toJsContact", () => {
     expect(card[`${JSCONTACT_VENDOR_PREFIX}:extra`]).toBe("reserved-name");
   });
 
-  it("does not export documents, risk, incidents, banks, vehicles, or social points", () => {
+  it("does not export documents, risk, incidents, banks, vehicles, work, finance, or social points", () => {
     const card = toJsContact(
       person({
         documents: [
@@ -220,6 +222,18 @@ describe("toJsContact", () => {
             provenance: [baseProv],
           },
         ],
+        employments: [
+          {
+            employer: "ООО ТестРабота",
+            provenance: [baseProv],
+          },
+        ],
+        financialFacts: [
+          {
+            amount: "450000",
+            provenance: [baseProv],
+          },
+        ],
         contactPoints: [
           {
             kind: "messenger",
@@ -237,6 +251,8 @@ describe("toJsContact", () => {
     expect(card.incidents).toBeUndefined();
     expect(card.bankRelations).toBeUndefined();
     expect(card.vehicles).toBeUndefined();
+    expect(card.employments).toBeUndefined();
+    expect(card.financialFacts).toBeUndefined();
     expect(card.onlineServices).toBeUndefined();
   });
 });

@@ -255,6 +255,35 @@ function vehicleCreates(
   }));
 }
 
+function employmentCreates(
+  draft: PersonDraft,
+): Prisma.EmploymentCreateWithoutPersonInput[] {
+  return (draft.employments ?? []).map((e) => ({
+    employer: e.employer ?? null,
+    position: e.position ?? null,
+    wish: e.wish ?? null,
+    periodFrom: e.periodFrom ?? null,
+    periodTo: e.periodTo ?? null,
+    extras: e.extras != null ? toJson(e.extras) : undefined,
+    provenance: toJson(e.provenance),
+  }));
+}
+
+function financialFactCreates(
+  draft: PersonDraft,
+): Prisma.FinancialFactCreateWithoutPersonInput[] {
+  return (draft.financialFacts ?? []).map((f) => ({
+    amount: f.amount ?? null,
+    currency: f.currency ?? null,
+    year: f.year ?? null,
+    kind: f.kind ?? null,
+    employer: f.employer ?? null,
+    raw: f.raw ?? null,
+    extras: f.extras != null ? toJson(f.extras) : undefined,
+    provenance: toJson(f.provenance),
+  }));
+}
+
 function displayNameFromPerson(p: {
   canonicalFull: string | null;
   nameVariants: { full: string }[];
@@ -300,6 +329,8 @@ export function createPersonRepository(
         incidents: { create: incidentCreates(parsed) },
         bankRelations: { create: bankRelationCreates(parsed) },
         vehicles: { create: vehicleCreates(parsed) },
+        employments: { create: employmentCreates(parsed) },
+        financialFacts: { create: financialFactCreates(parsed) },
         sourceReports: {
           create: {
             reportImportId: ctx.reportImportId,

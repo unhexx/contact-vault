@@ -2,6 +2,8 @@ import type {
   Address as DomainAddress,
   BankRelation as DomainBankRelation,
   ContactPoint,
+  Employment as DomainEmployment,
+  FinancialFact as DomainFinancialFact,
   IdentityDocument,
   Incident as DomainIncident,
   NameVariant,
@@ -15,6 +17,8 @@ import type {
   Address,
   BankRelation as DbBankRelation,
   ContactPoint as DbContactPoint,
+  Employment as DbEmployment,
+  FinancialFact as DbFinancialFact,
   IdentityDocument as DbIdentityDocument,
   Incident as DbIncident,
   NameVariant as DbNameVariant,
@@ -42,6 +46,8 @@ export type PersonWithChildren = DbPerson & {
   incidents: DbIncident[];
   bankRelations: DbBankRelation[];
   vehicles: DbVehicle[];
+  employments: DbEmployment[];
+  financialFacts: DbFinancialFact[];
   sourceReports: PersonSourceReportWithImport[];
 };
 
@@ -228,6 +234,39 @@ function mapBankRelation(row: DbBankRelation): DomainBankRelation {
   };
 }
 
+function mapEmployment(row: DbEmployment): DomainEmployment {
+  return {
+    id: row.id,
+    employer: row.employer ?? undefined,
+    position: row.position ?? undefined,
+    wish: row.wish ?? undefined,
+    periodFrom: row.periodFrom ?? undefined,
+    periodTo: row.periodTo ?? undefined,
+    extras:
+      row.extras && typeof row.extras === "object" && !Array.isArray(row.extras)
+        ? (row.extras as Record<string, unknown>)
+        : undefined,
+    provenance: asProvenanceArray(row.provenance),
+  };
+}
+
+function mapFinancialFact(row: DbFinancialFact): DomainFinancialFact {
+  return {
+    id: row.id,
+    amount: row.amount ?? undefined,
+    currency: row.currency ?? undefined,
+    year: row.year ?? undefined,
+    kind: row.kind ?? undefined,
+    employer: row.employer ?? undefined,
+    raw: row.raw ?? undefined,
+    extras:
+      row.extras && typeof row.extras === "object" && !Array.isArray(row.extras)
+        ? (row.extras as Record<string, unknown>)
+        : undefined,
+    provenance: asProvenanceArray(row.provenance),
+  };
+}
+
 function mapVehicle(row: DbVehicle): DomainVehicle {
   const ownershipPeriods = Array.isArray(row.ownershipPeriods)
     ? (row.ownershipPeriods as DomainVehicle["ownershipPeriods"])
@@ -298,7 +337,8 @@ export function asSourceWarnings(value: unknown): SourceWarning[] {
 /**
  * Map Prisma person + children to domain Person.
  * Filters soft-deleted contact points / docs / addresses / relationships /
- * risk scores / incidents / bank relations / vehicles if present.
+ * risk scores / incidents / bank relations / vehicles / employments /
+ * financial facts if present.
  */
 export function toDomainPerson(row: PersonWithChildren): Person {
   const nameVariants = row.nameVariants.map(mapNameVariant);
@@ -383,6 +423,12 @@ export function toDomainPerson(row: PersonWithChildren): Person {
     vehicles: (row.vehicles ?? [])
       .filter((r) => r.deletedAt == null)
       .map(mapVehicle),
+    employments: (row.employments ?? [])
+      .filter((r) => r.deletedAt == null)
+      .map(mapEmployment),
+    financialFacts: (row.financialFacts ?? [])
+      .filter((r) => r.deletedAt == null)
+      .map(mapFinancialFact),
     extras:
       row.extras && typeof row.extras === "object"
         ? (row.extras as Record<string, unknown>)
@@ -411,6 +457,8 @@ export const personInclude = {
   incidents: { where: { deletedAt: null } },
   bankRelations: { where: { deletedAt: null } },
   vehicles: { where: { deletedAt: null } },
+  employments: { where: { deletedAt: null } },
+  financialFacts: { where: { deletedAt: null } },
   nameVariants: true,
   sourceReports: {
     include: {

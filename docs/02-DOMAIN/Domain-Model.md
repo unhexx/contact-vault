@@ -156,6 +156,41 @@ type Vehicle = {
 };
 ```
 
+### Employment
+
+First-class CDD/OSINT fact (v0.3). Requires **employer or position**. Wish / period stay as observed. Unknown embed keys go in `extras`. Not a merge key.
+
+```ts
+type Employment = {
+  id?: string;                 // assigned on persist
+  employer?: string;
+  position?: string;
+  wish?: string;               // желаемая должность
+  periodFrom?: string;
+  periodTo?: string;
+  extras?: Record<string, unknown>;
+  provenance: Provenance[];
+};
+```
+
+### FinancialFact
+
+First-class income / source-of-funds row (v0.3). Requires **amount, raw, or employer**. Amount stays a string as observed (do not invent currency or masking). Unknown keys go in `extras`. Not a merge key.
+
+```ts
+type FinancialFact = {
+  id?: string;                 // assigned on persist
+  amount?: string;
+  currency?: string;
+  year?: string;
+  kind?: string;               // salary, income, … as observed
+  employer?: string;
+  raw?: string;
+  extras?: Record<string, unknown>;
+  provenance: Provenance[];
+};
+```
+
 ### BankRelation
 
 First-class KYC/OSINT fact (v0.3). Bank **name** is required. Account numbers stay optional hints (as observed — do not invent masking). Unknown embed keys go in `extras`. Not a merge key.
@@ -260,7 +295,7 @@ type Person = {
 };
 ```
 
-Supporting types (`Employment`, `FinancialFact`, `TravelRecord`, `PaymentCard`, `PhoneReputation`) follow the same pattern: structured fields + `provenance[]`.
+Supporting types (`TravelRecord`, `PaymentCard`, `PhoneReputation`) follow the same pattern: structured fields + `provenance[]`.
 
 ## Invariants & Rules
 
@@ -268,6 +303,7 @@ Supporting types (`Employment`, `FinancialFact`, `TravelRecord`, `PaymentCard`, 
 - Matching rules produce `MergeSuggestion` only. Exact keys: phone e164 / emailNorm / document type+numberNorm. Name+DOB: `isLikelySamePerson` on canonical/variants **and** compatible partial DOB (equal or hyphen-boundary prefix). Missing DOB or conflicting full dates do not suggest. Never silent merge.
 - Merge is an explicit domain command that produces an audit event; it never happens silently.
 - BankRelation is a first-class child (v0.3). Merge always-moves bank rows. Bank name is not a matching key.
+- Employment and FinancialFact are first-class children (v0.3). Merge always-moves those rows. Employer / income is not a matching key.
 - Person 360 **import timeline** is append-only: `PersonSourceReport` / ReportImport rows plus `audit_log` for that Person (`import` via source link, `merge` / `dismiss` / `soft_delete`). Newest first. Do not collapse or rewrite history.
 - Soft-delete only; hard delete is a privileged, logged operation.
 - Confidence scores are informational; UI must always show sources.

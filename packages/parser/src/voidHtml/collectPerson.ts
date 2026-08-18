@@ -2,6 +2,8 @@ import type {
   Address,
   BankRelation,
   ContactPoint,
+  Employment,
+  FinancialFact,
   IdentityDocument,
   NameVariant,
   PersonDraft,
@@ -56,6 +58,9 @@ const MAPPED_DATA_KEYS = new Set([
   "banks",
   "vehicles",
   "autoregs",
+  "work",
+  "companies",
+  "finance",
 ]);
 
 const KNOWN_BANK_KEYS = new Set([
@@ -124,6 +129,58 @@ const KNOWN_VEHICLE_KEYS = new Set([
   "ownership_periods",
 ]);
 
+const KNOWN_EMPLOYMENT_KEYS = new Set([
+  "company",
+  "name",
+  "employer",
+  "org",
+  "organization",
+  "org_name",
+  "company_name",
+  "workplace",
+  "work",
+  "position",
+  "title",
+  "post",
+  "job",
+  "occupation",
+  "wish",
+  "desired_position",
+  "desired_title",
+  "desired",
+  "from",
+  "to",
+  "date_from",
+  "dateFrom",
+  "date_to",
+  "dateTo",
+  "start",
+  "end",
+  "periodFrom",
+  "period_from",
+  "periodTo",
+  "period_to",
+]);
+
+const KNOWN_FINANCE_KEYS = new Set([
+  "amount",
+  "sum",
+  "income",
+  "salary",
+  "value",
+  "currency",
+  "curr",
+  "year",
+  "kind",
+  "type",
+  "employer",
+  "company",
+  "org",
+  "raw",
+  "text",
+  "description",
+]);
+
 export type CollectPersonResult = {
   person: PersonDraft | null;
   reportQuery?: string;
@@ -185,6 +242,8 @@ export function collectPersonFromEmbed(
   const relationships: Relationship[] = [];
   const bankRelations: BankRelation[] = [];
   const vehicles: Vehicle[] = [];
+  const employments: Employment[] = [];
+  const financialFacts: FinancialFact[] = [];
   const nameVariants: NameVariant[] = [];
   let dateOfBirth: string | undefined;
   let placeOfBirth: string | undefined;
@@ -613,6 +672,131 @@ export function collectPersonFromEmbed(
   collectVehicleItems(asArray(data.vehicles), "vehicles");
   collectVehicleItems(asArray(data.autoregs), "autoregs");
 
+  // --- work / companies → Employment (v0.3) ---
+  const collectEmploymentItems = (items: unknown[], section: string) => {
+    for (const item of items) {
+      if (!isRecord(item)) continue;
+      const employer =
+        asString(item.employer) ??
+        asString(item.company) ??
+        asString(item.company_name) ??
+        asString(item.organization) ??
+        asString(item.org_name) ??
+        asString(item.org) ??
+        asString(item.workplace) ??
+        asString(item.work) ??
+        asString(item.name);
+      const position =
+        asString(item.position) ??
+        asString(item.title) ??
+        asString(item.post) ??
+        asString(item.job) ??
+        asString(item.occupation);
+      if (!employer && !position) {
+        warnings.push({
+          code: "EMPTY_SECTION",
+          message: "Employment entry missing employer or position",
+          section,
+          severity: "warn",
+        });
+        continue;
+      }
+      const wish =
+        asString(item.wish) ??
+        asString(item.desired_position) ??
+        asString(item.desired_title) ??
+        asString(item.desired);
+      const periodFrom =
+        asString(item.periodFrom) ??
+        asString(item.period_from) ??
+        asString(item.from) ??
+        asString(item.date_from) ??
+        asString(item.dateFrom) ??
+        asString(item.start);
+      const periodTo =
+        asString(item.periodTo) ??
+        asString(item.period_to) ??
+        asString(item.to) ??
+        asString(item.date_to) ??
+        asString(item.dateTo) ??
+        asString(item.end);
+      const extras: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(item)) {
+        if (!KNOWN_EMPLOYMENT_KEYS.has(k)) extras[k] = v;
+      }
+      const employment: Employment = {
+        provenance: [
+          makeProvenance({
+            ...provBase,
+            section,
+            originalKey: employer ? "employer" : "position",
+            originalValue: employer ?? position ?? "",
+          }),
+        ],
+      };
+      if (employer) employment.employer = employer;
+      if (position) employment.position = position;
+      if (wish) employment.wish = wish;
+      if (periodFrom) employment.periodFrom = periodFrom;
+      if (periodTo) employment.periodTo = periodTo;
+      if (Object.keys(extras).length > 0) employment.extras = extras;
+      employments.push(employment);
+    }
+  };
+  collectEmploymentItems(asArray(data.work), "work");
+  collectEmploymentItems(asArray(data.companies), "companies");
+
+  // --- finance → FinancialFact (v0.3) ---
+  for (const item of asArray(data.finance)) {
+    if (!isRecord(item)) continue;
+    const amount =
+      asString(item.amount) ??
+      asString(item.sum) ??
+      asString(item.income) ??
+      asString(item.salary) ??
+      asString(item.value);
+    const raw =
+      asString(item.raw) ?? asString(item.text) ?? asString(item.description);
+    const employer =
+      asString(item.employer) ??
+      asString(item.company) ??
+      asString(item.org);
+    if (!amount && !raw && !employer) {
+      warnings.push({
+        code: "EMPTY_SECTION",
+        message: "Finance entry missing amount, raw, or employer",
+        section: "finance",
+        severity: "warn",
+      });
+      continue;
+    }
+    const currency = asString(item.currency) ?? asString(item.curr);
+    const year = asString(item.year);
+    const kind = asString(item.kind) ?? asString(item.type);
+    const extras: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(item)) {
+      if (!KNOWN_FINANCE_KEYS.has(k)) extras[k] = v;
+    }
+    const fact: FinancialFact = {
+      provenance: [
+        makeProvenance({
+          ...provBase,
+          section: "finance",
+          originalKey: amount ? "amount" : raw ? "raw" : "employer",
+          originalValue: amount ?? raw ?? employer ?? "",
+        }),
+      ],
+    };
+    if (amount) fact.amount = amount;
+    if (currency) fact.currency = currency;
+    if (year) fact.year = year;
+    if (kind) fact.kind = kind;
+    if (employer) fact.employer = employer;
+    if (raw) fact.raw = raw;
+    if (Object.keys(extras).length > 0) fact.extras = extras;
+    financialFacts.push(fact);
+  }
+
   // --- connections / family → Relationship only (KD17) ---
   const connectionItems = [
     ...asArray(data.connections),
@@ -676,6 +860,8 @@ export function collectPersonFromEmbed(
     incidents: [],
     bankRelations,
     vehicles,
+    employments,
+    financialFacts,
   };
   if (canonicalName) person.canonicalName = canonicalName;
   if (dateOfBirth) person.dateOfBirth = dateOfBirth;

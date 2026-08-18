@@ -31,6 +31,8 @@ function draft(partial: Partial<PersonDraft>): PersonDraft {
     incidents: [],
     bankRelations: [],
     vehicles: [],
+    employments: [],
+    financialFacts: [],
     ...partial,
   };
 }

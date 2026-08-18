@@ -41,9 +41,9 @@ All three normalize into the same domain model (`Person` + children + `Provenanc
 | addresses | Address[] |
 | movements | Address periods + TravelRecord(MOVEMENT) |
 | connections / family | Relationship[] |
-| work / companies | Employment + Company |
+| work / companies | Employment[] (v0.3: `company`/`name`/`employer`/`org` → employer; `position`/`title`/`post` → position; optional from/to, wish; other keys → extras). Require employer or position. |
 | vehicles / autoregs | Vehicle[] (v0.3: `brand`/`mark`/`make`, `model`, `plate`/`reg_num`/`gosnomer`, `vin`; optional year/power/volume/category/ownership; other keys → extras). Require plate, vin, brand, or model. `autophotos` stay unmapped (no photo pipeline). |
-| finance | FinancialFact[] |
+| finance | FinancialFact[] (v0.3: `amount`/`sum`/`income`/`salary` as observed string; optional year/kind/currency/employer/raw; other keys → extras). Require amount, raw, or employer. |
 | flights / crossings | TravelRecord |
 | incidents | Incident[] |
 | banks | BankRelation[] (v0.3: `name` / `bank` / `bank_name` → bankName; optional account* → accountHint; `bik`/`bic`; other keys → extras). Cards stay unmapped. |

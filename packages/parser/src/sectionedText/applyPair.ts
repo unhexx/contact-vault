@@ -1,8 +1,11 @@
 import type {
   Address,
   ContactPoint,
+  Employment,
+  FinancialFact,
   IdentityDocument,
   NameVariant,
+  Provenance,
   Relationship,
 } from "@contact-vault/domain";
 import {
@@ -34,6 +37,8 @@ export type Accumulator = {
   addresses: Address[];
   relationships: Relationship[];
   nameVariants: NameVariant[];
+  employments: Employment[];
+  financialFacts: FinancialFact[];
   canonicalName?: NameVariant;
   dateOfBirth?: string;
   placeOfBirth?: string;
@@ -56,6 +61,8 @@ export function emptyAcc(): Accumulator {
     addresses: [],
     relationships: [],
     nameVariants: [],
+    employments: [],
+    financialFacts: [],
     extras: {},
     passportDraft: {},
   };
@@ -277,6 +284,23 @@ function addName(
   acc.nameVariants.push(nv);
 }
 
+function pushEmploymentField(
+  acc: Accumulator,
+  field: "employer" | "position" | "wish",
+  value: string,
+  provenance: Provenance[],
+): void {
+  const last = acc.employments[acc.employments.length - 1];
+  if (last && !last[field]) {
+    last[field] = value;
+    return;
+  }
+  acc.employments.push({
+    [field]: value,
+    provenance,
+  });
+}
+
 function applyPair(
   acc: Accumulator,
   key: string,
@@ -464,6 +488,41 @@ function applyPair(
         kind: "messenger",
         network: "max",
         identifier: value,
+        provenance: [
+          makeProvenance({
+            reportId: ctx.reportId,
+            reportQuery: ctx.reportQuery,
+            sourceName,
+            section: sectionTitle,
+            originalKey: key,
+            originalValue: value,
+            extractedAt: ctx.extractedAt,
+            confidence: conf,
+          }),
+        ],
+      });
+      break;
+    }
+    case "employer":
+    case "position":
+    case "wish": {
+      pushEmploymentField(acc, target, value, [
+        makeProvenance({
+          reportId: ctx.reportId,
+          reportQuery: ctx.reportQuery,
+          sourceName,
+          section: sectionTitle,
+          originalKey: key,
+          originalValue: value,
+          extractedAt: ctx.extractedAt,
+          confidence: conf,
+        }),
+      ]);
+      break;
+    }
+    case "income": {
+      acc.financialFacts.push({
+        amount: value,
         provenance: [
           makeProvenance({
             reportId: ctx.reportId,
