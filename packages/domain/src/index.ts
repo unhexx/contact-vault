@@ -132,6 +132,7 @@ export {
   MergedIntoExistingSchema,
   MovedEntityIdsSchema,
   PersonScalarSnapshotSchema,
+  TargetProvenanceSnapshotSchema,
   mergeUndoBlockReason,
   parseMergeAuditPayload,
   type MergeAuditPayload,
@@ -139,4 +140,5 @@ export {
   type MergedIntoExisting,
   type MovedEntityIds,
   type PersonScalarSnapshot,
+  type TargetProvenanceSnapshot,
 } from "./merge-audit.js";

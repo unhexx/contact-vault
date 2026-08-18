@@ -46,6 +46,21 @@ export const MergedIntoExistingSchema = z.object({
 export type MergedIntoExisting = z.infer<typeof MergedIntoExistingSchema>;
 
 /**
+ * Target child provenance as it was before this merge appended source facts.
+ * Presence of the array (even empty) marks a collision-reversible merge:
+ * colliding contact/doc rows were soft-deleted on the source, skipped PSR kept.
+ */
+export const TargetProvenanceSnapshotSchema = z.object({
+  entityType: z.string().min(1),
+  entityId: z.string().uuid(),
+  provenance: z.unknown(),
+});
+
+export type TargetProvenanceSnapshot = z.infer<
+  typeof TargetProvenanceSnapshotSchema
+>;
+
+/**
  * Audit payload for action=merge (entity = survivor Person).
  * Undo reads this; it must not be rewritten.
  */
@@ -58,6 +73,7 @@ export const MergeAuditPayloadSchema = z.object({
   suggestionId: z.string().uuid().nullable().optional(),
   targetScalarsBefore: PersonScalarSnapshotSchema.optional(),
   dismissedSuggestionIds: z.array(z.string().uuid()).default([]),
+  targetProvenanceBefore: z.array(TargetProvenanceSnapshotSchema).optional(),
 });
 
 export type MergeAuditPayload = z.infer<typeof MergeAuditPayloadSchema>;
@@ -75,14 +91,18 @@ export function parseMergeAuditPayload(
 }
 
 /**
- * First undo slice: only no-collision merges that recorded targetScalarsBefore.
- * Hard-deleted colliding phones/emails/docs/PSR rows are not restorable yet.
+ * Blocks undo when the merge cannot be reversed from the audit payload.
+ * Legacy hard-delete collision merges (no targetProvenanceBefore) stay blocked.
  */
 export function mergeUndoBlockReason(
   payload: MergeAuditPayload,
 ): MergeUndoBlockReason | null {
   if (payload.targetScalarsBefore == null) return "missing_target_scalars";
-  if (payload.mergedIntoExisting.length > 0) return "has_collisions";
-  if (payload.skippedPersonSourceReportIds.length > 0) return "has_skipped_psr";
+  if (payload.targetProvenanceBefore == null) {
+    if (payload.mergedIntoExisting.length > 0) return "has_collisions";
+    if (payload.skippedPersonSourceReportIds.length > 0) {
+      return "has_skipped_psr";
+    }
+  }
   return null;
 }

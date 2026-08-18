@@ -1,8 +1,9 @@
 /**
  * Explicit merge service (KD18, KD22).
  * Move children + PersonSourceReport; provenance merge on norm-key collisions;
+ * soft-delete colliding contact/doc on the source; keep skipped PSR;
  * soft-delete source; reversible AuditLog payload.
- * Undo (first slice): restore no-collision merges from that audit event.
+ * Undo restores from that audit event, including the collision path.
  */
 import {
   Prisma,
@@ -402,7 +403,8 @@ export async function previewMerge(
 
 /**
  * Merge source → target: move children, append provenance on collisions,
- * move PersonSourceReport (drop on unique conflict), soft-delete source.
+ * soft-delete colliding contact/doc (keep on source), keep skipped PSR
+ * (unique personId+reportImportId), soft-delete source.
  */
 export async function mergePersons(
   prisma: PrismaClient,
@@ -492,11 +494,29 @@ export async function mergePersons(
         entityId: string;
         fromSourceEntityId: string;
       }> = [];
+      const targetProvenanceBefore: Array<{
+        entityType: string;
+        entityId: string;
+        provenance: unknown;
+      }> = [];
+      const provenanceSnapSeen = new Set<string>();
+      const snapTargetProvenance = (
+        entityType: string,
+        entityId: string,
+        provenance: unknown,
+      ) => {
+        const key = `${entityType}:${entityId}`;
+        if (provenanceSnapSeen.has(key)) return;
+        provenanceSnapSeen.add(key);
+        targetProvenanceBefore.push({ entityType, entityId, provenance });
+      };
 
       const [sourceKids, targetKids] = await Promise.all([
         loadMergeChildren(tx, sourcePersonId),
         loadMergeChildren(tx, targetPersonId),
       ]);
+
+      const now = new Date();
 
       const targetPhoneByE164 = new Map<string, ContactPointRow>();
       const targetEmailByNorm = new Map<string, ContactPointRow>();
@@ -508,7 +528,7 @@ export async function mergePersons(
       }
 
       const cpMoveIds: string[] = [];
-      const cpDeleteIds: string[] = [];
+      const cpSoftDeleteIds: string[] = [];
       for (const cp of sourceKids.contactPoints) {
         let hit: ContactPointRow | undefined;
         if (cp.kind === "phone" && cp.e164) {
@@ -517,13 +537,14 @@ export async function mergePersons(
           hit = targetEmailByNorm.get(cp.emailNorm);
         }
         if (hit) {
+          snapTargetProvenance("ContactPoint", hit.id, hit.provenance);
           const provenance = mergeProvenance(hit.provenance, cp.provenance);
           hit.provenance = provenance;
           await tx.contactPoint.update({
             where: { id: hit.id },
             data: { provenance },
           });
-          cpDeleteIds.push(cp.id);
+          cpSoftDeleteIds.push(cp.id);
           mergedIntoExisting.push({
             entityType: "ContactPoint",
             entityId: hit.id,
@@ -545,26 +566,30 @@ export async function mergePersons(
         });
         movedEntityIds.contactPoints.push(...cpMoveIds);
       }
-      if (cpDeleteIds.length > 0) {
-        await tx.contactPoint.deleteMany({ where: { id: { in: cpDeleteIds } } });
+      if (cpSoftDeleteIds.length > 0) {
+        await tx.contactPoint.updateMany({
+          where: { id: { in: cpSoftDeleteIds } },
+          data: { deletedAt: now },
+        });
       }
 
       const targetDocByKey = new Map(
         targetKids.documents.map((d) => [`${d.type}:${d.numberNorm}`, d]),
       );
       const docMoveIds: string[] = [];
-      const docDeleteIds: string[] = [];
+      const docSoftDeleteIds: string[] = [];
       for (const doc of sourceKids.documents) {
         const key = `${doc.type}:${doc.numberNorm}`;
         const hit = targetDocByKey.get(key);
         if (hit) {
+          snapTargetProvenance("IdentityDocument", hit.id, hit.provenance);
           const provenance = mergeProvenance(hit.provenance, doc.provenance);
           hit.provenance = provenance;
           await tx.identityDocument.update({
             where: { id: hit.id },
             data: { provenance },
           });
-          docDeleteIds.push(doc.id);
+          docSoftDeleteIds.push(doc.id);
           mergedIntoExisting.push({
             entityType: "IdentityDocument",
             entityId: hit.id,
@@ -582,9 +607,10 @@ export async function mergePersons(
         });
         movedEntityIds.documents.push(...docMoveIds);
       }
-      if (docDeleteIds.length > 0) {
-        await tx.identityDocument.deleteMany({
-          where: { id: { in: docDeleteIds } },
+      if (docSoftDeleteIds.length > 0) {
+        await tx.identityDocument.updateMany({
+          where: { id: { in: docSoftDeleteIds } },
+          data: { deletedAt: now },
         });
       }
 
@@ -673,10 +699,8 @@ export async function mergePersons(
         targetKids.personSourceReports.map((p) => p.reportImportId),
       );
       const psrMoveIds: string[] = [];
-      const psrDeleteIds: string[] = [];
       for (const psr of sourceKids.personSourceReports) {
         if (targetPsrByReport.has(psr.reportImportId)) {
-          psrDeleteIds.push(psr.id);
           skippedPersonSourceReportIds.push(psr.id);
         } else {
           psrMoveIds.push(psr.id);
@@ -690,13 +714,6 @@ export async function mergePersons(
         });
         movedEntityIds.personSourceReports.push(...psrMoveIds);
       }
-      if (psrDeleteIds.length > 0) {
-        await tx.personSourceReport.deleteMany({
-          where: { id: { in: psrDeleteIds } },
-        });
-      }
-
-      const now = new Date();
 
       // Accept suggestion while both persons still active
       if (suggestionId) {
@@ -775,6 +792,7 @@ export async function mergePersons(
             suggestionId: suggestionId ?? null,
             targetScalarsBefore,
             dismissedSuggestionIds,
+            targetProvenanceBefore,
           }),
         },
       });
@@ -923,8 +941,9 @@ function scalarWriteData(snapshot: PersonScalarSnapshot) {
 }
 
 /**
- * Undo a merge from its audit event. First slice: no-collision only.
- * Appends `unmerge` (does not rewrite the merge row).
+ * Undo a merge from its audit event.
+ * Collision path: undelete source contact/doc, restore target provenance,
+ * skipped PSR stays on source. Appends `unmerge` (does not rewrite the merge row).
  */
 export async function undoMerge(
   prisma: PrismaClient,
@@ -1056,6 +1075,84 @@ export async function undoMerge(
         }
       }
 
+      const collisionCps = payload.mergedIntoExisting.filter(
+        (m) => m.entityType === "ContactPoint",
+      );
+      const collisionDocs = payload.mergedIntoExisting.filter(
+        (m) => m.entityType === "IdentityDocument",
+      );
+      const collisionCpIds = collisionCps.map((m) => m.fromSourceEntityId);
+      const collisionDocIds = collisionDocs.map((m) => m.fromSourceEntityId);
+
+      if (payload.targetProvenanceBefore != null) {
+        if (collisionCpIds.length > 0) {
+          const found = await tx.contactPoint.count({
+            where: { id: { in: collisionCpIds }, personId: sourcePersonId },
+          });
+          if (found !== collisionCpIds.length) {
+            throw new AppError(
+              "CONFLICT",
+              "Cannot undo merge: a colliding contact is no longer on the source",
+              "MERGE_UNDO_MUTATED",
+            );
+          }
+        }
+        if (collisionDocIds.length > 0) {
+          const found = await tx.identityDocument.count({
+            where: { id: { in: collisionDocIds }, personId: sourcePersonId },
+          });
+          if (found !== collisionDocIds.length) {
+            throw new AppError(
+              "CONFLICT",
+              "Cannot undo merge: a colliding document is no longer on the source",
+              "MERGE_UNDO_MUTATED",
+            );
+          }
+        }
+        if (payload.skippedPersonSourceReportIds.length > 0) {
+          const found = await tx.personSourceReport.count({
+            where: {
+              id: { in: payload.skippedPersonSourceReportIds },
+              personId: sourcePersonId,
+            },
+          });
+          if (found !== payload.skippedPersonSourceReportIds.length) {
+            throw new AppError(
+              "CONFLICT",
+              "Cannot undo merge: a skipped source report is no longer on the source",
+              "MERGE_UNDO_MUTATED",
+            );
+          }
+        }
+        for (const snap of payload.targetProvenanceBefore) {
+          if (snap.entityType === "ContactPoint") {
+            const row = await tx.contactPoint.findUnique({
+              where: { id: snap.entityId },
+              select: { id: true },
+            });
+            if (!row) {
+              throw new AppError(
+                "CONFLICT",
+                "Cannot undo merge: a target contact for provenance restore is missing",
+                "MERGE_UNDO_MUTATED",
+              );
+            }
+          } else if (snap.entityType === "IdentityDocument") {
+            const row = await tx.identityDocument.findUnique({
+              where: { id: snap.entityId },
+              select: { id: true },
+            });
+            if (!row) {
+              throw new AppError(
+                "CONFLICT",
+                "Cannot undo merge: a target document for provenance restore is missing",
+                "MERGE_UNDO_MUTATED",
+              );
+            }
+          }
+        }
+      }
+
       await tx.person.update({
         where: { id: sourcePersonId },
         data: { deletedAt: null },
@@ -1071,6 +1168,34 @@ export async function undoMerge(
         where: { id: targetPersonId },
         data: scalarWriteData(targetScalarsBefore),
       });
+
+      if (payload.targetProvenanceBefore != null) {
+        for (const snap of payload.targetProvenanceBefore) {
+          if (snap.entityType === "ContactPoint") {
+            await tx.contactPoint.update({
+              where: { id: snap.entityId },
+              data: { provenance: toJson(snap.provenance) },
+            });
+          } else if (snap.entityType === "IdentityDocument") {
+            await tx.identityDocument.update({
+              where: { id: snap.entityId },
+              data: { provenance: toJson(snap.provenance) },
+            });
+          }
+        }
+        if (collisionCpIds.length > 0) {
+          await tx.contactPoint.updateMany({
+            where: { id: { in: collisionCpIds } },
+            data: { deletedAt: null, personId: sourcePersonId },
+          });
+        }
+        if (collisionDocIds.length > 0) {
+          await tx.identityDocument.updateMany({
+            where: { id: { in: collisionDocIds } },
+            data: { deletedAt: null, personId: sourcePersonId },
+          });
+        }
+      }
 
       if (payload.suggestionId) {
         await tx.mergeSuggestion.updateMany({

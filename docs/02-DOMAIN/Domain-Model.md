@@ -302,8 +302,8 @@ Supporting types (`TravelRecord`, `PaymentCard`, `PhoneReputation`) follow the s
 - A Person should have at least one strong identifier (phone, email, passport, or high-confidence Name+DOB).
 - Matching rules produce `MergeSuggestion` only. Exact keys: phone e164 / emailNorm / document type+numberNorm. Name+DOB: `isLikelySamePerson` on canonical/variants **and** compatible partial DOB (equal or hyphen-boundary prefix). Missing DOB or conflicting full dates do not suggest. Never silent merge.
 - Merge is an explicit domain command that produces an audit event; it never happens silently.
-- Merge audit payload is the undo record (`movedEntityIds`, collision lists, `targetScalarsBefore`, `dismissedSuggestionIds`). Undo is a separate `unmerge` event; do not rewrite the merge row.
-- First undo slice: only no-collision merges that recorded `targetScalarsBefore`. Hard-deleted colliding phones/emails/docs/PSR rows are not restorable yet. Pre-payload merges cannot be undone.
+- Merge audit payload is the undo record (`movedEntityIds`, collision lists, `targetScalarsBefore`, `targetProvenanceBefore`, `dismissedSuggestionIds`). Undo is a separate `unmerge` event; do not rewrite the merge row.
+- Undo restores a merge that recorded `targetScalarsBefore`. Collision path: colliding phones/emails/docs are soft-deleted on the source (not hard-deleted); skipped PSR rows stay on the source; `targetProvenanceBefore` restores survivor provenance. Legacy hard-delete payloads (no `targetProvenanceBefore`) and pre-payload merges cannot be undone.
 - BankRelation is a first-class child (v0.3). Merge always-moves bank rows. Bank name is not a matching key.
 - Employment and FinancialFact are first-class children (v0.3). Merge always-moves those rows. Employer / income is not a matching key.
 - Person 360 **import timeline** is append-only: `PersonSourceReport` / ReportImport rows plus `audit_log` for that Person (`import` via source link, `merge` / `unmerge` / `dismiss` / `soft_delete`). Newest first. Do not collapse or rewrite history.

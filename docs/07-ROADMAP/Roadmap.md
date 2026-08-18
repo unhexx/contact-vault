@@ -60,7 +60,7 @@ CDD / FATF Rec. 10 order after identity: bank relations first (PRD G1), then veh
 
 ## Later
 
-- Reversible merge: collision-path undo (restore hard-deleted contact/doc/PSR rows) and operator undo UI. First slice is in-tree: `merge.undo` restores a no-collision merge from its audit event (`targetScalarsBefore`); no UI.
+- Reversible merge: operator undo UI. In-tree: `merge.undo` restores no-collision and collision-path merges from the audit event (`targetScalarsBefore` + `targetProvenanceBefore`; colliding contact/doc soft-deleted on source, skipped PSR kept). No UI.
 - Optional at-rest encryption.
 - Multi-user auth.
 - Graph visualization of relationships.

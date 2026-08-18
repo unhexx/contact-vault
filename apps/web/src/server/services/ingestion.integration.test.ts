@@ -1162,10 +1162,49 @@ Email: dismiss.other.${stamp}@example.com
     });
   }, 60_000);
 
-  it("refuses undo when merge deleted colliding contact points", async () => {
+  it("undo restores a collision merge (soft-deleted contact/doc + kept PSR)", async () => {
     const stamp = Date.now();
     const phone = `+7922${String(stamp).slice(-7)}`;
-    const emptyProv = [] as const;
+    const reportId = randomUUID();
+    const targetProv = [
+      {
+        reportId,
+        sourceName: "target-phone",
+        extractedAt: "2020-01-01T00:00:00.000Z",
+      },
+    ];
+    const sourceProv = [
+      {
+        reportId,
+        sourceName: "source-phone",
+        extractedAt: "2021-01-01T00:00:00.000Z",
+      },
+    ];
+    const targetDocProv = [
+      {
+        reportId,
+        sourceName: "target-doc",
+        extractedAt: "2020-01-01T00:00:00.000Z",
+      },
+    ];
+    const sourceDocProv = [
+      {
+        reportId,
+        sourceName: "source-doc",
+        extractedAt: "2021-01-01T00:00:00.000Z",
+      },
+    ];
+
+    await prisma.reportImport.create({
+      data: {
+        id: reportId,
+        format: "sectioned_text",
+        status: "completed",
+        contentHash: `undo-collide-${stamp}`,
+        filename: "undo-collide.txt",
+        completedAt: new Date(),
+      },
+    });
 
     const target = await prisma.person.create({
       data: {
@@ -1175,7 +1214,23 @@ Email: dismiss.other.${stamp}@example.com
             kind: "phone",
             e164: phone,
             raw: phone,
-            provenance: emptyProv,
+            provenance: targetProv,
+          },
+        },
+        documents: {
+          create: {
+            type: "snils",
+            number: "112-233-445 95",
+            numberNorm: "11223344595",
+            provenance: targetDocProv,
+          },
+        },
+        sourceReports: {
+          create: {
+            reportImportId: reportId,
+            query: "target",
+            contentHash: `undo-collide-${stamp}`,
+            mode: "text_export",
           },
         },
       },
@@ -1188,10 +1243,42 @@ Email: dismiss.other.${stamp}@example.com
             kind: "phone",
             e164: phone,
             raw: phone,
-            provenance: emptyProv,
+            provenance: sourceProv,
+          },
+        },
+        documents: {
+          create: {
+            type: "snils",
+            number: "112-233-445 95",
+            numberNorm: "11223344595",
+            provenance: sourceDocProv,
+          },
+        },
+        sourceReports: {
+          create: {
+            reportImportId: reportId,
+            query: "source",
+            contentHash: `undo-collide-${stamp}`,
+            mode: "text_export",
           },
         },
       },
+    });
+
+    const sourcePhone = await prisma.contactPoint.findFirstOrThrow({
+      where: { personId: source.id },
+    });
+    const targetPhone = await prisma.contactPoint.findFirstOrThrow({
+      where: { personId: target.id },
+    });
+    const sourceDoc = await prisma.identityDocument.findFirstOrThrow({
+      where: { personId: source.id },
+    });
+    const targetDoc = await prisma.identityDocument.findFirstOrThrow({
+      where: { personId: target.id },
+    });
+    const sourcePsr = await prisma.personSourceReport.findFirstOrThrow({
+      where: { personId: source.id },
     });
 
     const merged = await mergePersons(prisma, {
@@ -1199,9 +1286,88 @@ Email: dismiss.other.${stamp}@example.com
       targetPersonId: target.id,
     });
 
-    await expect(undoMerge(prisma, merged.auditLogId)).rejects.toMatchObject({
-      code: "BAD_REQUEST",
-      appCode: "MERGE_UNDO_COLLISION",
+    const audit = await prisma.auditLog.findUniqueOrThrow({
+      where: { id: merged.auditLogId },
     });
+    const payload = audit.payload as {
+      mergedIntoExisting?: unknown[];
+      skippedPersonSourceReportIds?: string[];
+      targetProvenanceBefore?: unknown[];
+    };
+    expect(payload.mergedIntoExisting).toHaveLength(2);
+    expect(payload.skippedPersonSourceReportIds).toEqual([sourcePsr.id]);
+    expect(payload.targetProvenanceBefore).toHaveLength(2);
+
+    const sourcePhoneAfterMerge = await prisma.contactPoint.findUniqueOrThrow({
+      where: { id: sourcePhone.id },
+    });
+    expect(sourcePhoneAfterMerge.deletedAt).not.toBeNull();
+    expect(sourcePhoneAfterMerge.personId).toBe(source.id);
+
+    const sourceDocAfterMerge = await prisma.identityDocument.findUniqueOrThrow({
+      where: { id: sourceDoc.id },
+    });
+    expect(sourceDocAfterMerge.deletedAt).not.toBeNull();
+    expect(sourceDocAfterMerge.personId).toBe(source.id);
+
+    expect(
+      await prisma.personSourceReport.findFirst({
+        where: { id: sourcePsr.id, personId: source.id },
+      }),
+    ).not.toBeNull();
+
+    const targetPhoneAfterMerge = await prisma.contactPoint.findUniqueOrThrow({
+      where: { id: targetPhone.id },
+    });
+    expect(targetPhoneAfterMerge.provenance).toEqual([
+      ...targetProv,
+      ...sourceProv,
+    ]);
+
+    const undone = await undoMerge(prisma, merged.auditLogId);
+    expect(undone.sourcePersonId).toBe(source.id);
+    expect(undone.targetPersonId).toBe(target.id);
+
+    const sourceRow = await prisma.person.findUniqueOrThrow({
+      where: { id: source.id },
+    });
+    expect(sourceRow.deletedAt).toBeNull();
+
+    const sourcePhoneAfterUndo = await prisma.contactPoint.findUniqueOrThrow({
+      where: { id: sourcePhone.id },
+    });
+    expect(sourcePhoneAfterUndo.deletedAt).toBeNull();
+    expect(sourcePhoneAfterUndo.personId).toBe(source.id);
+    expect(sourcePhoneAfterUndo.provenance).toEqual(sourceProv);
+
+    const sourceDocAfterUndo = await prisma.identityDocument.findUniqueOrThrow({
+      where: { id: sourceDoc.id },
+    });
+    expect(sourceDocAfterUndo.deletedAt).toBeNull();
+    expect(sourceDocAfterUndo.personId).toBe(source.id);
+    expect(sourceDocAfterUndo.provenance).toEqual(sourceDocProv);
+
+    const targetPhoneAfterUndo = await prisma.contactPoint.findUniqueOrThrow({
+      where: { id: targetPhone.id },
+    });
+    expect(targetPhoneAfterUndo.provenance).toEqual(targetProv);
+    expect(targetPhoneAfterUndo.personId).toBe(target.id);
+
+    const targetDocAfterUndo = await prisma.identityDocument.findUniqueOrThrow({
+      where: { id: targetDoc.id },
+    });
+    expect(targetDocAfterUndo.provenance).toEqual(targetDocProv);
+    expect(targetDocAfterUndo.personId).toBe(target.id);
+
+    expect(
+      await prisma.personSourceReport.findFirst({
+        where: { id: sourcePsr.id, personId: source.id },
+      }),
+    ).not.toBeNull();
+    expect(
+      await prisma.personSourceReport.count({
+        where: { personId: target.id },
+      }),
+    ).toBe(1);
   }, 60_000);
 });

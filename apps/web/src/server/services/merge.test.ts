@@ -198,6 +198,53 @@ describe("undoMerge guards", () => {
       appCode: "MERGE_UNDO_COLLISION",
     });
   });
+
+  it("enters a transaction when collisions recorded targetProvenanceBefore", async () => {
+    const prisma = {
+      auditLog: {
+        findUnique: async () => ({
+          id: auditId,
+          action: "merge",
+          payload: {
+            sourcePersonId: "11111111-1111-4111-8111-111111111111",
+            targetPersonId: "22222222-2222-4222-8222-222222222222",
+            movedEntityIds: {},
+            skippedPersonSourceReportIds: [],
+            mergedIntoExisting: [
+              {
+                entityType: "ContactPoint",
+                entityId: "33333333-3333-4333-8333-333333333333",
+                fromSourceEntityId: "44444444-4444-4444-8444-444444444444",
+              },
+            ],
+            targetScalarsBefore: {
+              canonicalFull: null,
+              canonicalLast: null,
+              canonicalFirst: null,
+              canonicalMiddle: null,
+              dateOfBirth: null,
+              placeOfBirth: null,
+              gender: null,
+              extras: null,
+            },
+            targetProvenanceBefore: [
+              {
+                entityType: "ContactPoint",
+                entityId: "33333333-3333-4333-8333-333333333333",
+                provenance: [],
+              },
+            ],
+          },
+        }),
+      },
+      $transaction: async () => {
+        throw new Error("entered-tx");
+      },
+    };
+    await expect(undoMerge(prisma as never, auditId)).rejects.toThrow(
+      "entered-tx",
+    );
+  });
 });
 
 describe("collisionsFromChildren", () => {

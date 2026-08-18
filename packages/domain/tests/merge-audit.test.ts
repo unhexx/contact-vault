@@ -83,4 +83,22 @@ describe("mergeUndoBlockReason", () => {
     });
     expect(mergeUndoBlockReason(payload)).toBe("has_skipped_psr");
   });
+
+  it("allows collision undo when targetProvenanceBefore was recorded", () => {
+    const payload = MergeAuditPayloadSchema.parse({
+      ...undoable,
+      mergedIntoExisting: [
+        {
+          entityType: "ContactPoint",
+          entityId: childId,
+          fromSourceEntityId: "44444444-4444-4444-8444-444444444444",
+        },
+      ],
+      skippedPersonSourceReportIds: [childId],
+      targetProvenanceBefore: [
+        { entityType: "ContactPoint", entityId: childId, provenance: [] },
+      ],
+    });
+    expect(mergeUndoBlockReason(payload)).toBeNull();
+  });
 });

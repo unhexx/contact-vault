@@ -2,7 +2,7 @@
  * merge.* procedures — listSuggestions / preview / accept / dismiss / undo.
  * Accept always merges newPersonId → targetPersonId (KD18).
  * Dismiss = keep both (no separate keep_separate strategy).
- * Undo = restore a no-collision merge from its audit event (no UI yet).
+ * Undo = restore a merge from its audit event, including collision path (no UI yet).
  */
 import { z } from "zod";
 
