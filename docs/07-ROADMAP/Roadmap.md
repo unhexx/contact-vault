@@ -56,7 +56,7 @@ List search already matches `canonicalFull` / `nameVariants`, phone `e164`, `ema
 |---|-------|----------|
 | 1 | Fuzzy matching (name + partial DOB) | **Done.** Matching rule only: `isLikelySamePerson` on canonical/variants **and** compatible partial DOB (equal or hyphen-boundary prefix). Conflicting full dates → no hit. Missing DOB → no hit. `matchedOn` emits `name` + `dob`. Inbox UI unchanged. No silent merge. |
 | 2 | Import timeline | **Done.** Append-only Contact 360 Timeline tab from `PersonSourceReport` / ReportImport + `audit_log` (`listForEntity("Person", id)`). Shows action, actor, timestamp, contentHash, format. Newest first. Dismiss writes Person audit events. No collapse / rewrite. |
-| 3 | JSContact export | Mapper + download of identity + contact points: `@type: Card`, `version: "2.0"`, `uid` = Person id, `kind: individual`, `name` components, `phones` / `emails` maps. Pass extras through as unknown properties. **Not** documents / risk / incidents. **Not** a Prisma/Zod rewrite. |
+| 3 | JSContact export | **Done.** Mapper + Contact 360 download of identity + contact points: `@type: Card`, `version: "2.0"`, `uid` = Person id, `kind: individual`, `name` components, `phones` / `emails` maps. Extras pass through as unknown / vendor-prefixed properties. **Not** documents / risk / incidents. **Not** a Prisma/Zod rewrite. |
 
 **Success:** two people with the same last+first (or token-prefix FIO) and compatible partial DOB get an **open suggestion** and nothing is merged until accept; 360 shows import + merge/dismiss events in time order; exporting a person yields a Card whose `uid` is the Person UUID and whose phones/emails round-trip the stored points; `pnpm test` + `pnpm check:fixtures` stay green; unknown format stays unknown.
 

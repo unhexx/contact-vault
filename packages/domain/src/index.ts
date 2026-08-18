@@ -1,8 +1,8 @@
 /**
  * @contact-vault/domain
  *
- * MVP contracts: Zod schemas, content-hash authority, match helpers (exact + name/DOB).
- * No Prisma, no parser I/O.
+ * MVP contracts: Zod schemas, content-hash authority, match helpers (exact + name/DOB),
+ * JSContact Card export mapper. No Prisma, no parser I/O.
  */
 
 // Content hash (KD13)
@@ -64,6 +64,23 @@ export {
   type TimelineEvent,
   type TimelineImportInput,
 } from "./timeline.js";
+
+// JSContact Card export (RFC 9553 / RFC 9982) — mapper only, not the domain
+export {
+  JSCONTACT_VENDOR_PREFIX,
+  JSCONTACT_VERSION,
+  jsContactFilename,
+  phonesEmailsFromJsContact,
+  toJsContact,
+  type JsContactCard,
+  type JsContactEmail,
+  type JsContactEmailPoint,
+  type JsContactName,
+  type JsContactNameComponent,
+  type JsContactPersonInput,
+  type JsContactPhone,
+  type JsContactPhonePoint,
+} from "./jscontact.js";
 
 // FIO / likely-same (parser + name+DOB matching)
 export {

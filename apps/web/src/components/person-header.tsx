@@ -1,12 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, GitMerge } from "lucide-react";
+import { ArrowLeft, Download, GitMerge } from "lucide-react";
 import type { Person } from "@contact-vault/domain";
 
 import { CopyField } from "@/components/copy-field";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  jsContactDownload,
+  triggerBrowserDownload,
+} from "@/lib/jscontact-export";
 import { shortId } from "@/lib/utils";
 
 type PersonHeaderProps = {
@@ -56,6 +60,16 @@ export function PersonHeader({
             ) : null}
           </div>
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => triggerBrowserDownload(jsContactDownload(person))}
+          aria-label="Export JSContact"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export JSContact
+        </Button>
       </div>
     </div>
   );
