@@ -13,8 +13,11 @@ import {
   type PrismaClient,
 } from "@contact-vault/db";
 import {
+  documentMatchFingerprint,
+  isDocumentNumberHmac,
   mergeUndoBlockReason,
   parseMergeAuditPayload,
+  parseReportBlobKey,
   type MovedEntityIds,
   type PersonScalarSnapshot,
 } from "@contact-vault/domain";
@@ -281,11 +284,30 @@ function countsFromChildren(kids: MergeChildren): EntityCounts {
   };
 }
 
+function resolveDocumentNumberKey(): Buffer | null {
+  try {
+    return parseReportBlobKey(process.env.REPORT_BLOB_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function documentDisplayNorm(
+  sourceNorm: string,
+  targetNorm: string,
+): string {
+  if (!isDocumentNumberHmac(sourceNorm)) return sourceNorm;
+  if (!isDocumentNumberHmac(targetNorm)) return targetNorm;
+  return sourceNorm;
+}
+
 /** Shared preview/execute policy: phone e164 / emailNorm / type+numberNorm. */
 export function collisionsFromChildren(
   source: Pick<MergeChildren, "contactPoints" | "documents">,
   target: Pick<MergeChildren, "contactPoints" | "documents">,
+  documentNumberKey?: Buffer | null,
 ): MatchedOnField[] {
+  const key = documentNumberKey ?? null;
   const collisions: MatchedOnField[] = [];
   const seen = new Set<string>();
 
@@ -318,13 +340,20 @@ export function collisionsFromChildren(
     }
   }
 
-  const targetDocs = new Set(
-    target.documents.map((d) => `${d.type}:${d.numberNorm}`),
+  const targetDocs = new Map(
+    target.documents.map((d) => [
+      documentMatchFingerprint(d.type, d.numberNorm, key),
+      d,
+    ]),
   );
   for (const d of source.documents) {
-    const fp = `${d.type}:${d.numberNorm}`;
-    if (targetDocs.has(fp)) {
-      push({ field: "document", value: fp });
+    const fp = documentMatchFingerprint(d.type, d.numberNorm, key);
+    const hit = targetDocs.get(fp);
+    if (hit) {
+      push({
+        field: "document",
+        value: `${d.type}:${documentDisplayNorm(d.numberNorm, hit.numberNorm)}`,
+      });
     }
   }
 
@@ -343,7 +372,7 @@ export async function findNormKeyCollisions(
     loadMergeChildren(prisma, sourcePersonId),
     loadMergeChildren(prisma, targetPersonId),
   ]);
-  return collisionsFromChildren(source, target);
+  return collisionsFromChildren(source, target, resolveDocumentNumberKey());
 }
 
 function asMatchedOn(value: unknown): MatchedOnField[] {
@@ -397,7 +426,11 @@ export async function previewMerge(
     matchedOn: asMatchedOn(suggestion.matchedOn),
     source: countsFromChildren(sourceKids),
     target: countsFromChildren(targetKids),
-    collisions: collisionsFromChildren(sourceKids, targetKids),
+    collisions: collisionsFromChildren(
+      sourceKids,
+      targetKids,
+      resolveDocumentNumberKey(),
+    ),
   };
 }
 
@@ -573,13 +606,17 @@ export async function mergePersons(
         });
       }
 
+      const docKey = resolveDocumentNumberKey();
       const targetDocByKey = new Map(
-        targetKids.documents.map((d) => [`${d.type}:${d.numberNorm}`, d]),
+        targetKids.documents.map((d) => [
+          documentMatchFingerprint(d.type, d.numberNorm, docKey),
+          d,
+        ]),
       );
       const docMoveIds: string[] = [];
       const docSoftDeleteIds: string[] = [];
       for (const doc of sourceKids.documents) {
-        const key = `${doc.type}:${doc.numberNorm}`;
+        const key = documentMatchFingerprint(doc.type, doc.numberNorm, docKey);
         const hit = targetDocByKey.get(key);
         if (hit) {
           snapTargetProvenance("IdentityDocument", hit.id, hit.provenance);

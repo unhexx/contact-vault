@@ -1,6 +1,6 @@
 # Contact Vault Roadmap
 
-Living plan after **v0.4.0**. Next release is **v0.5** (optional at-rest protection; report blobs first). Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
+Living plan after **v0.4.0**. Next release is **v0.5** (optional at-rest protection; report blobs then document numbers). Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
 
 ## Research notes (2026-08-18)
 
@@ -87,7 +87,7 @@ Stock PostgreSQL 16 has **no TDE** (ADR-002). Operator LUKS / volume encryption 
 - `contentHash` / idempotency always hash **plaintext**. Timeline still shows that hash.
 - Wrong or missing key on a ciphertext file: fail closed. Do not treat ciphertext as report text.
 - Key material is env-only. Never commit keys. Never log key bytes or full document numbers.
-- Do **not** encrypt `e164` / `emailNorm` / `numberNorm` this release (merge + search keys).
+- Do **not** encrypt `e164` / `emailNorm`. Document `number` is sealed; stored `numberNorm` becomes a keyed HMAC (`h1:` + hex) so findByExactKeys + list search of a **full** normalized number still work. Leftover plaintext `numberNorm` remains the fallback when no key is set.
 - JSContact export and merge undo are unchanged.
 
 **Skip this release:** vehicle photo / lightbox, payment-card PAN as a searchable identity, bank-name matching, employment graph, inventing Postgres TDE, graph visualization (PRD non-goal; Relationship stays a hint), `pg_trgm` / weighted fuzzy (no suggestion-volume justification; name+partial-DOB already shipped).
@@ -95,7 +95,7 @@ Stock PostgreSQL 16 has **no TDE** (ADR-002). Operator LUKS / volume encryption 
 ### v0.5.x slices
 
 - [x] Optional AES-256-GCM on `STORE_RAW_REPORTS` blobs + env key + round-trip tests (first increment).
-- [ ] IdentityDocument number ciphertext + searchable HMAC / blind index (after blobs).
+- [x] IdentityDocument number ciphertext + searchable HMAC / blind index (after blobs).
 - [ ] Multi-user auth (after blobs; still not multi-tenant SaaS).
 
 ## Later

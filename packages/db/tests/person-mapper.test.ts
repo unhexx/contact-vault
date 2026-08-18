@@ -1,3 +1,8 @@
+import {
+  documentNumberHmac,
+  parseDocumentNumberKey,
+  sealDocumentNumber,
+} from "@contact-vault/domain";
 import { describe, expect, it } from "vitest";
 import { toDomainPerson, type PersonWithChildren } from "../src/mappers/person-mapper.js";
 
@@ -127,5 +132,57 @@ describe("toDomainPerson nameVariants", () => {
     expect(person.sourceReports[0]?.warnings).toEqual([
       { code: "UNKNOWN_KEY", message: "x", severity: "info" },
     ]);
+  });
+});
+
+describe("toDomainPerson document numbers", () => {
+  const key = parseDocumentNumberKey("ab".repeat(32))!;
+  const raw = "4509 123456";
+
+  function docRow(number: string, numberNorm: string) {
+    return {
+      id: "dddddddd-eeee-4fff-8000-111111111111",
+      personId,
+      type: "passport_ru" as const,
+      number,
+      numberNorm,
+      series: null,
+      issuedAt: null,
+      issuedBy: null,
+      departmentCode: null,
+      validUntil: null,
+      status: null,
+      meta: null,
+      provenance,
+      createdAt: now,
+      deletedAt: null,
+    };
+  }
+
+  it("decrypts an envelope number when the key is present", () => {
+    const person = toDomainPerson(
+      row({
+        documents: [docRow(sealDocumentNumber(raw, key), documentNumberHmac("4509123456", key))],
+      }),
+      { documentNumberKey: key },
+    );
+    expect(person.documents[0]?.number).toBe(raw);
+  });
+
+  it("fails closed on an envelope when the key is missing", () => {
+    expect(() =>
+      toDomainPerson(
+        row({
+          documents: [
+            docRow(sealDocumentNumber(raw, key), documentNumberHmac("4509123456", key)),
+          ],
+        }),
+      ),
+    ).toThrow(/Encrypted document number requires REPORT_BLOB_KEY/);
+  });
+
+  it("returns leftover plaintext numbers without a key", () => {
+    const person = toDomainPerson(row({ documents: [docRow(raw, "4509123456")] }));
+    expect(person.documents[0]?.number).toBe(raw);
   });
 });

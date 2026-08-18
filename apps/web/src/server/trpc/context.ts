@@ -42,7 +42,9 @@ export function createContext(): TrpcContext {
   const prisma = resolvePrisma(env.DATABASE_URL);
   return {
     prisma,
-    personRepo: createPersonRepository(prisma),
+    personRepo: createPersonRepository(prisma, {
+      documentNumberKey: env.reportBlobKey,
+    }),
     reportImportRepo: createReportImportRepository(prisma),
     mergeSuggestionRepo: createMergeSuggestionRepository(prisma),
     auditLogRepo: createAuditLogRepository(prisma),
@@ -58,7 +60,9 @@ export function createContextWithPrisma(
   const env = { ...getEnv(), ...envOverrides };
   return {
     prisma,
-    personRepo: createPersonRepository(prisma),
+    personRepo: createPersonRepository(prisma, {
+      documentNumberKey: env.reportBlobKey,
+    }),
     reportImportRepo: createReportImportRepository(prisma),
     mergeSuggestionRepo: createMergeSuggestionRepository(prisma),
     auditLogRepo: createAuditLogRepository(prisma),

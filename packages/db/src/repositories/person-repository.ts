@@ -1,9 +1,11 @@
 import {
   collectPersonNames,
+  documentNumberHmac,
   normalizeDocumentNumber,
   normalizeEmail,
   PersonDraftSchema,
   scoreNameDobMatch,
+  sealDocumentNumber,
   type ExactMatchKey,
   type Person,
   type PersonDraft,
@@ -35,12 +37,14 @@ import type {
   MatchedOnField,
   NameDobQuery,
   PersonRepository,
+  PersonRepositoryOptions,
   PersonSummary,
 } from "../types.js";
 
 /**
  * Search fragments for IdentityDocument.numberNorm (Russian-first).
  * Digits-only matches passport_ru/snils/inn/oms; alnum strip matches foreign/license.
+ * When a key is set these fragments are also HMAC'd for exact blind-index lookup.
  */
 function documentSearchFragments(q: string): string[] {
   const out = new Set<string>();
@@ -112,20 +116,30 @@ function contactPointCreates(
 
 function documentCreates(
   draft: PersonDraft,
+  key: Buffer | null,
 ): Prisma.IdentityDocumentCreateWithoutPersonInput[] {
-  return dedupeDocuments(draft.documents).map((doc) => ({
-    type: doc.type as DocumentType,
-    number: doc.number,
-    numberNorm: normalizeDocumentNumber(doc.type, doc.number),
-    series: doc.series ?? null,
-    issuedAt: doc.issuedAt ?? null,
-    issuedBy: doc.issuedBy ?? null,
-    departmentCode: doc.departmentCode ?? null,
-    validUntil: doc.validUntil ?? null,
-    status: doc.status ?? null,
-    meta: doc.meta != null ? toJson(doc.meta) : undefined,
-    provenance: toJson(doc.provenance),
-  }));
+  return dedupeDocuments(draft.documents).map((doc) => {
+    const numberNorm = normalizeDocumentNumber(doc.type, doc.number);
+    const stored = key
+      ? {
+          number: sealDocumentNumber(doc.number, key),
+          numberNorm: documentNumberHmac(numberNorm, key),
+        }
+      : { number: doc.number, numberNorm };
+    return {
+      type: doc.type as DocumentType,
+      number: stored.number,
+      numberNorm: stored.numberNorm,
+      series: doc.series ?? null,
+      issuedAt: doc.issuedAt ?? null,
+      issuedBy: doc.issuedBy ?? null,
+      departmentCode: doc.departmentCode ?? null,
+      validUntil: doc.validUntil ?? null,
+      status: doc.status ?? null,
+      meta: doc.meta != null ? toJson(doc.meta) : undefined,
+      provenance: toJson(doc.provenance),
+    };
+  });
 }
 
 function addressCreates(
@@ -295,8 +309,10 @@ function displayNameFromPerson(p: {
 
 export function createPersonRepository(
   client: PrismaClient | DbClient,
+  opts?: PersonRepositoryOptions,
 ): PersonRepository {
   const root = client as PrismaClient;
+  const documentNumberKey = opts?.documentNumberKey ?? null;
 
   async function createFromDraft(
     draft: PersonDraft,
@@ -321,7 +337,7 @@ export function createPersonRepository(
         gender: parsed.gender ?? null,
         extras: parsed.extras != null ? toJson(parsed.extras) : undefined,
         contactPoints: { create: contactPointCreates(parsed) },
-        documents: { create: documentCreates(parsed) },
+        documents: { create: documentCreates(parsed, documentNumberKey) },
         addresses: { create: addressCreates(parsed) },
         relationships: { create: relationshipCreates(parsed) },
         nameVariants: { create: nameVariantCreates(parsed) },
@@ -343,7 +359,9 @@ export function createPersonRepository(
       include: personInclude,
     });
 
-    return toDomainPerson(created as PersonWithChildren);
+    return toDomainPerson(created as PersonWithChildren, {
+      documentNumberKey,
+    });
   }
 
   async function get360(id: string): Promise<Person | null> {
@@ -352,7 +370,7 @@ export function createPersonRepository(
       include: personInclude,
     });
     if (!row) return null;
-    return toDomainPerson(row as PersonWithChildren);
+    return toDomainPerson(row as PersonWithChildren, { documentNumberKey });
   }
 
   async function softDelete(id: string): Promise<void> {
@@ -423,6 +441,10 @@ export function createPersonRepository(
     }
 
     const docFrags = q ? documentSearchFragments(q) : [];
+    const docHmacs =
+      documentNumberKey && docFrags.length > 0
+        ? docFrags.map((frag) => documentNumberHmac(frag, documentNumberKey))
+        : [];
     const searchFilter: Prisma.PersonWhereInput | undefined = q
       ? {
           OR: [
@@ -449,9 +471,12 @@ export function createPersonRepository(
                     documents: {
                       some: {
                         deletedAt: null,
-                        OR: docFrags.map((frag) => ({
-                          numberNorm: { contains: frag },
-                        })),
+                        OR: [
+                          ...docHmacs.map((hmac) => ({ numberNorm: hmac })),
+                          ...docFrags.map((frag) => ({
+                            numberNorm: { contains: frag },
+                          })),
+                        ],
                       },
                     },
                   } satisfies Prisma.PersonWhereInput,
@@ -618,9 +643,15 @@ export function createPersonRepository(
     if (docs.length > 0) {
       // Query per unique type groups
       const byType = new Map<string, string[]>();
+      const hmacToPlain = new Map<string, string>();
       for (const d of docs) {
         const list = byType.get(d.type) ?? [];
         list.push(d.number);
+        if (documentNumberKey) {
+          const hmac = documentNumberHmac(d.number, documentNumberKey);
+          list.push(hmac);
+          hmacToPlain.set(hmac, d.number);
+        }
         byType.set(d.type, list);
       }
       for (const [type, numbers] of byType) {
@@ -634,9 +665,11 @@ export function createPersonRepository(
           select: { type: true, numberNorm: true, personId: true },
         });
         for (const row of rows) {
+          const displayNorm =
+            hmacToPlain.get(row.numberNorm) ?? row.numberNorm;
           addHit(row.personId, {
             field: "document",
-            value: `${row.type}:${row.numberNorm}`,
+            value: `${row.type}:${displayNorm}`,
           });
         }
       }

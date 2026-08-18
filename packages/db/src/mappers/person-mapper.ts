@@ -1,17 +1,18 @@
-import type {
-  Address as DomainAddress,
-  BankRelation as DomainBankRelation,
-  ContactPoint,
-  Employment as DomainEmployment,
-  FinancialFact as DomainFinancialFact,
-  IdentityDocument,
-  Incident as DomainIncident,
-  NameVariant,
-  Person,
-  Provenance,
-  Relationship,
-  RiskScore as DomainRiskScore,
-  Vehicle as DomainVehicle,
+import {
+  openDocumentNumber,
+  type Address as DomainAddress,
+  type BankRelation as DomainBankRelation,
+  type ContactPoint,
+  type Employment as DomainEmployment,
+  type FinancialFact as DomainFinancialFact,
+  type IdentityDocument,
+  type Incident as DomainIncident,
+  type NameVariant,
+  type Person,
+  type Provenance,
+  type Relationship,
+  type RiskScore as DomainRiskScore,
+  type Vehicle as DomainVehicle,
 } from "@contact-vault/domain";
 import type {
   Address,
@@ -110,11 +111,19 @@ function mapContactPoint(cp: DbContactPoint): ContactPoint {
   }
 }
 
-function mapDocument(doc: DbIdentityDocument): IdentityDocument {
+export type ToDomainPersonOptions = {
+  /** AES-256 key used to open IdentityDocument.number envelopes. */
+  documentNumberKey?: Buffer | null;
+};
+
+function mapDocument(
+  doc: DbIdentityDocument,
+  key: Buffer | null,
+): IdentityDocument {
   return {
     id: doc.id,
     type: doc.type,
-    number: doc.number,
+    number: openDocumentNumber(doc.number, key),
     series: doc.series ?? undefined,
     issuedAt: doc.issuedAt ?? undefined,
     issuedBy: doc.issuedBy ?? undefined,
@@ -340,7 +349,11 @@ export function asSourceWarnings(value: unknown): SourceWarning[] {
  * risk scores / incidents / bank relations / vehicles / employments /
  * financial facts if present.
  */
-export function toDomainPerson(row: PersonWithChildren): Person {
+export function toDomainPerson(
+  row: PersonWithChildren,
+  opts?: ToDomainPersonOptions,
+): Person {
+  const documentNumberKey = opts?.documentNumberKey ?? null;
   const nameVariants = row.nameVariants.map(mapNameVariant);
 
   // Prefer matching NameVariant row for provenance; fall back to first variant.
@@ -404,7 +417,7 @@ export function toDomainPerson(row: PersonWithChildren): Person {
       .map(mapContactPoint),
     documents: row.documents
       .filter((d) => d.deletedAt == null)
-      .map(mapDocument),
+      .map((d) => mapDocument(d, documentNumberKey)),
     addresses: row.addresses
       .filter((a) => a.deletedAt == null)
       .map(mapAddress),

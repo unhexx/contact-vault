@@ -63,6 +63,11 @@ export type NameDobQuery = {
   dateOfBirth?: string;
 };
 
+export type PersonRepositoryOptions = {
+  /** AES-256 key; null/omit keeps plaintext number + numberNorm. */
+  documentNumberKey?: Buffer | null;
+};
+
 export interface PersonRepository {
   list(params: ListPersonsParams): Promise<ListPersonsResult>;
   /** null if missing or soft-deleted */

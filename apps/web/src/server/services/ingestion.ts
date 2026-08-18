@@ -251,7 +251,9 @@ export async function importReport(
   try {
     const result = await prisma.$transaction(
       async (tx) => {
-        const personRepo = createPersonRepository(tx);
+        const personRepo = createPersonRepository(tx, {
+          documentNumberKey: reportBlobKey,
+        });
         const mergeRepo = createMergeSuggestionRepository(tx);
         const auditRepo = createAuditLogRepository(tx);
         const importRepo = createReportImportRepository(tx);

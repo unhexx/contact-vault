@@ -2,7 +2,8 @@
  * @contact-vault/db
  *
  * Prisma schema, client, and repositories.
- * Soft-delete on Person; provenance JSONB; emailNorm / numberNorm exact match.
+ * Soft-delete on Person; provenance JSONB; emailNorm / numberNorm exact match
+ * (numberNorm may be an HMAC blind index when REPORT_BLOB_KEY is set).
  */
 
 export {
@@ -34,6 +35,7 @@ export {
   toDomainPerson,
   type PersonWithChildren,
   type SourceWarning,
+  type ToDomainPersonOptions,
 } from "./mappers/person-mapper.js";
 
 export { createPersonRepository } from "./repositories/person-repository.js";
@@ -62,6 +64,7 @@ export type {
   MatchedOnJson,
   NameDobQuery,
   PersonRepository,
+  PersonRepositoryOptions,
   PersonSummary,
   PrismaTx,
   ReportFormatDb,

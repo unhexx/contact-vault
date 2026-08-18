@@ -5,14 +5,19 @@
  * Setup: docker compose up -d postgres && pnpm db:migrate:deploy
  */
 import {
+  documentNumberHmac,
   extractExactMatchKeys,
+  isDocumentNumberEnvelope,
+  isDocumentNumberHmac,
   normalizeDocumentNumber,
   normalizeEmail,
+  parseDocumentNumberKey,
 } from "@contact-vault/domain";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CursorError } from "../src/cursor.js";
 import { DbError } from "../src/errors.js";
 import { normalizeSourceMode } from "../src/mappers/person-mapper.js";
+import { createPersonRepository } from "../src/repositories/person-repository.js";
 import {
   contentHashSynthetic,
   createTestCtx,
@@ -1115,6 +1120,89 @@ describe.skipIf(!hasDb)("db integration", () => {
       },
     );
     expect(person.sourceReports[0]?.mode).toBe("inline_dossier");
+  });
+
+  it("encrypts document number and matches via HMAC when a key is set", async () => {
+    const key = parseDocumentNumberKey("ab".repeat(32))!;
+    const persons = createPersonRepository(ctx.prisma, {
+      documentNumberKey: key,
+    });
+    const report = await ensureReportImport(ctx);
+    const draft = draftPerson({
+      reportId: report.id,
+      name: SYNTH.nameA,
+      passport: SYNTH.passportA,
+      snils: SYNTH.snilsA,
+    });
+    const person = await persons.createFromDraft(draft, {
+      reportImportId: report.id,
+      contentHash: report.contentHash,
+      query: "doc-hmac",
+      mode: "void_html",
+    });
+
+    const passportRow = await ctx.prisma.identityDocument.findFirst({
+      where: { personId: person.id, type: "passport_ru" },
+    });
+    expect(passportRow).toBeTruthy();
+    expect(isDocumentNumberEnvelope(passportRow!.number)).toBe(true);
+    expect(isDocumentNumberHmac(passportRow!.numberNorm)).toBe(true);
+    expect(passportRow!.number).not.toContain("4509");
+    expect(passportRow!.numberNorm).toBe(
+      documentNumberHmac(
+        normalizeDocumentNumber("passport_ru", SYNTH.passportA),
+        key,
+      ),
+    );
+
+    const view = await persons.get360(person.id);
+    expect(view?.documents.find((d) => d.type === "passport_ru")?.number).toBe(
+      SYNTH.passportA,
+    );
+    expect(view?.documents.find((d) => d.type === "snils")?.number).toBe(
+      SYNTH.snilsA,
+    );
+
+    const hits = await persons.findByExactKeys(extractExactMatchKeys(draft));
+    expect(hits[0]?.personId).toBe(person.id);
+    expect(hits[0]?.matchedOn.map((m) => m.value).sort()).toEqual([
+      `passport_ru:${SYNTH.passportANorm}`,
+      `snils:${normalizeDocumentNumber("snils", SYNTH.snilsA)}`,
+    ]);
+
+    const byPassport = await persons.list({ q: SYNTH.passportA, limit: 10 });
+    expect(byPassport.items.map((i) => i.id)).toEqual([person.id]);
+    const byFullSnils = await persons.list({
+      q: SYNTH.snilsA,
+      limit: 10,
+    });
+    expect(byFullSnils.items.map((i) => i.id)).toEqual([person.id]);
+  });
+
+  it("fails closed on ciphertext document rows when the key is missing", async () => {
+    const key = parseDocumentNumberKey("ab".repeat(32))!;
+    const sealed = createPersonRepository(ctx.prisma, {
+      documentNumberKey: key,
+    });
+    const report = await ensureReportImport(ctx);
+    const person = await sealed.createFromDraft(
+      draftPerson({
+        reportId: report.id,
+        name: SYNTH.nameA,
+        passport: SYNTH.passportA,
+      }),
+      {
+        reportImportId: report.id,
+        contentHash: report.contentHash,
+        query: "doc-fail-closed",
+        mode: "void_html",
+      },
+    );
+
+    await expect(ctx.persons.get360(person.id)).rejects.toMatchObject({
+      name: "DocumentNumberError",
+      code: "MISSING_KEY",
+    });
   });
 });
 

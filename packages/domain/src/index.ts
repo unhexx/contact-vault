@@ -2,7 +2,7 @@
  * @contact-vault/domain
  *
  * MVP contracts: Zod schemas, content-hash authority, match helpers (exact + name/DOB),
- * JSContact Card export mapper, optional report-blob envelope. No Prisma, no parser I/O.
+ * JSContact Card export mapper, optional report-blob / document-number envelopes. No Prisma, no parser I/O.
  */
 
 // Content hash (KD13)
@@ -23,6 +23,24 @@ export {
   type ReportBlobEnvelope,
   type ReportBlobErrorCode,
 } from "./report-blob.js";
+
+// Optional AES-256-GCM + HMAC blind index for IdentityDocument numbers (v0.5)
+export {
+  DOCUMENT_NUMBER_ALG,
+  DOCUMENT_NUMBER_HMAC_PREFIX,
+  DOCUMENT_NUMBER_PURPOSE,
+  DocumentNumberEnvelopeSchema,
+  DocumentNumberError,
+  documentMatchFingerprint,
+  documentNumberHmac,
+  isDocumentNumberEnvelope,
+  isDocumentNumberHmac,
+  openDocumentNumber,
+  parseDocumentNumberKey,
+  sealDocumentNumber,
+  type DocumentNumberEnvelope,
+  type DocumentNumberErrorCode,
+} from "./document-number.js";
 
 // Provenance (KD1)
 export { ProvenanceSchema, type Provenance } from "./provenance.js";

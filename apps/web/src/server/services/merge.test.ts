@@ -1,6 +1,10 @@
 /**
  * Unit tests for merge service guards + survivor scalar policy (no DB).
  */
+import {
+  documentNumberHmac,
+  parseDocumentNumberKey,
+} from "@contact-vault/domain";
 import { describe, expect, it } from "vitest";
 
 import { AppError } from "../errors.js";
@@ -273,6 +277,27 @@ describe("collisionsFromChildren", () => {
       "document",
       "email",
       "phone",
+    ]);
+  });
+
+  it("treats leftover plaintext numberNorm as the same document when keyed", () => {
+    const key = parseDocumentNumberKey("ab".repeat(32))!;
+    const hmac = documentNumberHmac("11223344595", key);
+    const collisions = collisionsFromChildren(
+      {
+        contactPoints: [],
+        documents: [{ id: "3", type: "snils", numberNorm: hmac, provenance: [] }],
+      },
+      {
+        contactPoints: [],
+        documents: [
+          { id: "6", type: "snils", numberNorm: "11223344595", provenance: [] },
+        ],
+      },
+      key,
+    );
+    expect(collisions).toEqual([
+      { field: "document", value: "snils:11223344595" },
     ]);
   });
 

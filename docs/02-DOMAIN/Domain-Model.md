@@ -95,7 +95,7 @@ type DocumentType =
 type IdentityDocument = {
   id: string;
   type: DocumentType;
-  number: string;
+  number: string;            // display value (decrypted); at rest may be AES-GCM + HMAC(numberNorm)
   series?: string;
   issuedAt?: string;             // date
   issuedBy?: string;
@@ -300,7 +300,7 @@ Supporting types (`TravelRecord`, `PaymentCard`, `PhoneReputation`) follow the s
 ## Invariants & Rules
 
 - A Person should have at least one strong identifier (phone, email, passport, or high-confidence Name+DOB).
-- Matching rules produce `MergeSuggestion` only. Exact keys: phone e164 / emailNorm / document type+numberNorm. Name+DOB: `isLikelySamePerson` on canonical/variants **and** compatible partial DOB (equal or hyphen-boundary prefix). Missing DOB or conflicting full dates do not suggest. Never silent merge.
+- Matching rules produce `MergeSuggestion` only. Exact keys: phone e164 / emailNorm / document type+numberNorm (stored `numberNorm` may be a keyed HMAC when `REPORT_BLOB_KEY` is set). Name+DOB: `isLikelySamePerson` on canonical/variants **and** compatible partial DOB (equal or hyphen-boundary prefix). Missing DOB or conflicting full dates do not suggest. Never silent merge.
 - Merge is an explicit domain command that produces an audit event; it never happens silently.
 - Merge audit payload is the undo record (`movedEntityIds`, collision lists, `targetScalarsBefore`, `targetProvenanceBefore`, `dismissedSuggestionIds`). Undo is a separate `unmerge` event; do not rewrite the merge row.
 - Undo restores a merge that recorded `targetScalarsBefore`. Collision path: colliding phones/emails/docs are soft-deleted on the source (not hard-deleted); skipped PSR rows stay on the source; `targetProvenanceBefore` restores survivor provenance. Legacy hard-delete payloads (no `targetProvenanceBefore`) and pre-payload merges cannot be undone.

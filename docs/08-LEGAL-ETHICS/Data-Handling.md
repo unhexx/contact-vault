@@ -11,7 +11,7 @@ Contact Vault processes highly sensitive personal data (identity documents, phon
 
 ## Engineering controls (to implement)
 
-- Optional encryption at rest for report blobs and document numbers. **v0.5 first slice:** AES-256-GCM on optional `STORE_RAW_REPORTS` files (`data/reports/{id}.bin`). Document numbers stay later (they are merge / search keys). See [Roadmap.md](../07-ROADMAP/Roadmap.md).
+- Optional encryption at rest for report blobs and document numbers. **v0.5:** AES-256-GCM on optional `STORE_RAW_REPORTS` files (`data/reports/{id}.bin`) and on `IdentityDocument.number` when `REPORT_BLOB_KEY` is set. Stored `numberNorm` is a keyed HMAC so exact match and list search of a full normalized number still work. No key keeps leftover plaintext (residual risk). Wrong/missing key on ciphertext rows fails closed. Do not encrypt `e164` / `emailNorm`. See [Roadmap.md](../07-ROADMAP/Roadmap.md).
 - No full passport/SNILS/INN/PIN/PUK values in application logs at `info` level.
 - Export / delete contact and related facts.
 - Clear UI marking of sources and confidence.

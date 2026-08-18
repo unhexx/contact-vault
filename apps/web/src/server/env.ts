@@ -2,6 +2,7 @@
  * Server env loading for apps/web (composition root).
  * DATABASE_URL required; STORE_RAW_REPORTS defaults false (KD14).
  * REPORT_BLOB_KEY is env-only; never log the hex or parsed bytes.
+ * The same key optionally seals IdentityDocument.number and HMACs numberNorm.
  */
 import { parseReportBlobKey } from "@contact-vault/domain";
 import { z } from "zod";
@@ -22,7 +23,7 @@ export type Env = {
   DATABASE_URL: string;
   NODE_ENV: "development" | "test" | "production";
   STORE_RAW_REPORTS: boolean;
-  /** 32-byte AES-256 key, or null when unset (plaintext blobs). */
+  /** 32-byte AES-256 key, or null when unset (plaintext blobs + document numbers). */
   reportBlobKey: Buffer | null;
   NEXT_PUBLIC_APP_URL?: string;
 };

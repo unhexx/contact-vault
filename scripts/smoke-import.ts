@@ -21,6 +21,7 @@ import {
   createPrismaClient,
   type PrismaClient,
 } from "@contact-vault/db";
+import { parseReportBlobKey } from "@contact-vault/domain";
 
 import { importReport } from "../apps/web/src/server/services/ingestion.js";
 import { mergePersons } from "../apps/web/src/server/services/merge.js";
@@ -85,7 +86,14 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const personRepo = createPersonRepository(prisma);
+  const documentNumberKey = parseReportBlobKey(process.env.REPORT_BLOB_KEY);
+  const personRepo = createPersonRepository(prisma, { documentNumberKey });
+  const importDeps = {
+    prisma,
+    storeRawReports: false,
+    dataRoot: repoRoot,
+    reportBlobKey: documentNumberKey,
+  };
   let failed = false;
 
   try {
@@ -93,7 +101,7 @@ async function main(): Promise<void> {
     const txtBase = load(samples.sectioned);
     const txtContent = txtBase + tag;
     const r1 = await importReport(
-      { prisma, storeRawReports: false, dataRoot: repoRoot },
+      importDeps,
       { filename: "person-basic.txt", content: txtContent },
     );
     assert(r1.duplicate === false, "first sectioned-text import must not be duplicate");
@@ -114,7 +122,7 @@ async function main(): Promise<void> {
     // --- 2. void-html import ---
     const htmlContent = load(samples.voidHtml) + `<!-- ${runId} -->\n`;
     const r2 = await importReport(
-      { prisma, storeRawReports: false, dataRoot: repoRoot },
+      importDeps,
       { filename: "person-basic.embed.html", content: htmlContent },
     );
     assert(r2.duplicate === false, "void-html import must not be duplicate");
@@ -184,7 +192,7 @@ async function main(): Promise<void> {
       .replace(/000000000000/g, inn);
     const inlineContent = inlineBase + tag;
     const rInline = await importReport(
-      { prisma, storeRawReports: false, dataRoot: repoRoot },
+      importDeps,
       { filename: "person-scoring-basic.txt", content: inlineContent },
     );
     assert(
@@ -238,7 +246,7 @@ async function main(): Promise<void> {
 
     // --- 4. re-import same sectioned content → duplicate ---
     const rDup = await importReport(
-      { prisma, storeRawReports: false, dataRoot: repoRoot },
+      importDeps,
       { filename: "person-basic.txt", content: txtContent },
     );
     assert(rDup.duplicate === true, "re-import must return duplicate: true");
@@ -255,7 +263,7 @@ async function main(): Promise<void> {
     // --- 5. variant sharing phone → merge suggestion ---
     const variantContent = load(samples.variant) + tag + `\n# variant\n`;
     const r3 = await importReport(
-      { prisma, storeRawReports: false, dataRoot: repoRoot },
+      importDeps,
       { filename: "person-variant-shared-phone.txt", content: variantContent },
     );
     assert(r3.duplicate === false, "variant import must not be duplicate");

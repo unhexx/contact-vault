@@ -2,6 +2,7 @@
  * tRPC init + error mapping for AppError / CursorError / DbError / ZodError.
  */
 import { CursorError, isDbError } from "@contact-vault/db";
+import { DocumentNumberError } from "@contact-vault/domain";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
@@ -81,6 +82,14 @@ export function toTrpcError(err: unknown): never {
           ? "CONFLICT"
           : "BAD_REQUEST";
     throw new TRPCError({ code, message: err.message, cause: err });
+  }
+
+  if (err instanceof DocumentNumberError) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: err.message,
+      cause: err,
+    });
   }
 
   throw new TRPCError({
