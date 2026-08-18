@@ -7,6 +7,7 @@ import { GitMerge, Trash2 } from "lucide-react";
 
 import {
   AddressesTab,
+  BanksTab,
   DocumentsTab,
   IdentityTab,
   NetworkTab,
@@ -157,6 +158,7 @@ export function Contact360({ personId }: { personId: string }) {
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="addresses">Addresses</TabsTrigger>
           <TabsTrigger value="network">Network</TabsTrigger>
+          <TabsTrigger value="banks">Banks</TabsTrigger>
           <TabsTrigger value="risk">Risk</TabsTrigger>
           <TabsTrigger value="sources">Sources</TabsTrigger>
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
@@ -176,6 +178,9 @@ export function Contact360({ personId }: { personId: string }) {
         </TabsContent>
         <TabsContent value="network">
           <NetworkTab person={person} />
+        </TabsContent>
+        <TabsContent value="banks">
+          <BanksTab person={person} />
         </TabsContent>
         <TabsContent value="risk">
           <RiskTab person={person} />

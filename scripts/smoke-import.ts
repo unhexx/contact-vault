@@ -120,9 +120,19 @@ async function main(): Promise<void> {
     assert(r2.duplicate === false, "void-html import must not be duplicate");
     assert(r2.format === "void-html", `expected void-html, got ${r2.format}`);
     assert(r2.personIds.length >= 1, "void-html must create ≥1 person");
+    const viewVoid = await personRepo.get360(r2.personIds[0]!);
+    assert(viewVoid, "get360 after void-html import");
+    assert(
+      (viewVoid.bankRelations?.length ?? 0) >= 1,
+      "void-html get360 must include BankRelation from data.banks",
+    );
+    assert(
+      viewVoid.bankRelations.some((b) => b.bankName === "ТестБанк"),
+      "void-html bank name must be ТестБанк",
+    );
     log(
       "2 import void-html",
-      `person=${r2.personIds[0]!.slice(0, 8)}… format=${r2.format}`,
+      `person=${r2.personIds[0]!.slice(0, 8)}… format=${r2.format} banks=${viewVoid.bankRelations.length}`,
     );
 
     // --- 3. inline-dossier import (scoring → riskScores + incidents on get360) ---

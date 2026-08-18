@@ -498,6 +498,86 @@ export function NetworkTab({ person }: { person: Person }) {
   );
 }
 
+export function BanksTab({ person }: { person: Person }) {
+  const banks = person.bankRelations ?? [];
+
+  if (banks.length === 0) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <EmptyHint>No bank relations</EmptyHint>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Banks</CardTitle>
+        <CardDescription>
+          Bank names and account hints from source reports
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-3">
+          {banks.map((b, i) => (
+            <li key={b.id ?? i} className="rounded-lg border p-3 text-sm">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <CopyField value={b.bankName} label="Bank name" />
+                {b.role ? <Badge variant="outline">{b.role}</Badge> : null}
+                <SourceBadge provenance={b.provenance} />
+              </div>
+              <dl className="grid gap-1.5 sm:grid-cols-[120px_1fr]">
+                {b.accountHint ? (
+                  <>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Account
+                    </dt>
+                    <dd>
+                      <CopyField
+                        value={b.accountHint}
+                        label="Account hint"
+                        mono
+                      />
+                    </dd>
+                  </>
+                ) : null}
+                {b.bik ? (
+                  <>
+                    <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      BIK
+                    </dt>
+                    <dd>
+                      <CopyField value={b.bik} label="BIK" mono />
+                    </dd>
+                  </>
+                ) : null}
+              </dl>
+              {b.extras && Object.keys(b.extras).length > 0 ? (
+                <ul className="mt-2 space-y-1 rounded-md border bg-muted/20 px-2 py-1.5 text-xs text-muted-foreground">
+                  {Object.entries(b.extras).map(([key, value]) => (
+                    <li key={key} className="flex flex-wrap gap-1.5">
+                      <span className="font-medium">{key}:</span>
+                      <CopyField
+                        value={
+                          typeof value === "string" ? value : JSON.stringify(value)
+                        }
+                        label={`Bank extra ${key}`}
+                        className="text-xs text-muted-foreground"
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function RiskTab({ person }: { person: Person }) {
   const riskScores = person.riskScores ?? [];
   const incidents = person.incidents ?? [];

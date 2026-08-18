@@ -27,7 +27,7 @@ export type ParseResult = {
   format: ReportFormat;
   reportMeta: ReportMeta;
   /**
-   * Primary drafts; relationships/riskScores/incidents MUST live on each draft (KD27, KD38).
+   * Primary drafts; relationships/riskScores/incidents/bankRelations MUST live on each draft (KD27, KD38).
    * Typically 0 or 1 primary person (KD17).
    */
   persons: PersonDraft[];

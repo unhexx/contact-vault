@@ -223,6 +223,19 @@ function incidentCreates(
   }));
 }
 
+function bankRelationCreates(
+  draft: PersonDraft,
+): Prisma.BankRelationCreateWithoutPersonInput[] {
+  return (draft.bankRelations ?? []).map((b) => ({
+    bankName: b.bankName,
+    accountHint: b.accountHint ?? null,
+    role: b.role ?? null,
+    bik: b.bik ?? null,
+    extras: b.extras != null ? toJson(b.extras) : undefined,
+    provenance: toJson(b.provenance),
+  }));
+}
+
 function displayNameFromPerson(p: {
   canonicalFull: string | null;
   nameVariants: { full: string }[];
@@ -266,6 +279,7 @@ export function createPersonRepository(
         nameVariants: { create: nameVariantCreates(parsed) },
         riskScores: { create: riskScoreCreates(parsed) },
         incidents: { create: incidentCreates(parsed) },
+        bankRelations: { create: bankRelationCreates(parsed) },
         sourceReports: {
           create: {
             reportImportId: ctx.reportImportId,

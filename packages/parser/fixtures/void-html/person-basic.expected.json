@@ -9,6 +9,7 @@
   "documentTypes": ["passport_ru", "snils"],
   "addressRaw": "г. Москва, ул. Примерная, д. 1, кв. 1",
   "relationshipFio": "Тестова Анна Тестовна",
-  "hasUnmappedBanks": true,
+  "hasUnmappedBanks": false,
+  "bankName": "ТестБанк",
   "reportQuery": "+79000000001"
 }

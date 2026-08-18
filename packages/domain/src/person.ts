@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AddressSchema } from "./address.js";
+import { BankRelationSchema } from "./bank-relation.js";
 import { ContactPointSchema } from "./contact-point.js";
 import { IdentityDocumentSchema } from "./identity-document.js";
 import { IncidentSchema } from "./incident.js";
@@ -35,6 +36,7 @@ const personFields = {
   relationships: z.array(RelationshipSchema).default([]),
   riskScores: z.array(RiskScoreSchema).default([]),
   incidents: z.array(IncidentSchema).default([]),
+  bankRelations: z.array(BankRelationSchema).default([]),
   extras: z.record(z.unknown()).optional(),
 } as const;
 

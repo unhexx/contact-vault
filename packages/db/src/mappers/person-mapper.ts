@@ -1,5 +1,6 @@
 import type {
   Address as DomainAddress,
+  BankRelation as DomainBankRelation,
   ContactPoint,
   IdentityDocument,
   Incident as DomainIncident,
@@ -11,6 +12,7 @@ import type {
 } from "@contact-vault/domain";
 import type {
   Address,
+  BankRelation as DbBankRelation,
   ContactPoint as DbContactPoint,
   IdentityDocument as DbIdentityDocument,
   Incident as DbIncident,
@@ -36,6 +38,7 @@ export type PersonWithChildren = DbPerson & {
   nameVariants: DbNameVariant[];
   riskScores: DbRiskScore[];
   incidents: DbIncident[];
+  bankRelations: DbBankRelation[];
   sourceReports: PersonSourceReportWithImport[];
 };
 
@@ -207,6 +210,21 @@ function mapRiskScore(row: DbRiskScore): DomainRiskScore {
   };
 }
 
+function mapBankRelation(row: DbBankRelation): DomainBankRelation {
+  return {
+    id: row.id,
+    bankName: row.bankName,
+    accountHint: row.accountHint ?? undefined,
+    role: row.role ?? undefined,
+    bik: row.bik ?? undefined,
+    extras:
+      row.extras && typeof row.extras === "object" && !Array.isArray(row.extras)
+        ? (row.extras as Record<string, unknown>)
+        : undefined,
+    provenance: asProvenanceArray(row.provenance),
+  };
+}
+
 function mapIncident(row: DbIncident): DomainIncident {
   return {
     id: row.id,
@@ -251,7 +269,7 @@ export function asSourceWarnings(value: unknown): SourceWarning[] {
 /**
  * Map Prisma person + children to domain Person.
  * Filters soft-deleted contact points / docs / addresses / relationships /
- * risk scores / incidents if present.
+ * risk scores / incidents / bank relations if present.
  */
 export function toDomainPerson(row: PersonWithChildren): Person {
   const nameVariants = row.nameVariants.map(mapNameVariant);
@@ -330,6 +348,9 @@ export function toDomainPerson(row: PersonWithChildren): Person {
     incidents: (row.incidents ?? [])
       .filter((r) => r.deletedAt == null)
       .map(mapIncident),
+    bankRelations: (row.bankRelations ?? [])
+      .filter((r) => r.deletedAt == null)
+      .map(mapBankRelation),
     extras:
       row.extras && typeof row.extras === "object"
         ? (row.extras as Record<string, unknown>)
@@ -356,6 +377,7 @@ export const personInclude = {
   relationships: { where: { deletedAt: null } },
   riskScores: { where: { deletedAt: null } },
   incidents: { where: { deletedAt: null } },
+  bankRelations: { where: { deletedAt: null } },
   nameVariants: true,
   sourceReports: {
     include: {

@@ -86,6 +86,7 @@ model Person {
   nameVariants             NameVariant[]
   riskScores               RiskScore[]
   incidents                Incident[]
+  bankRelations            BankRelation[]
   sourceReports            PersonSourceReport[]
   mergeSuggestionsAsTarget MergeSuggestion[]    @relation("SuggestionTarget")
   mergeSuggestionsAsNew    MergeSuggestion[]    @relation("SuggestionNew")
@@ -233,6 +234,23 @@ model Incident {
 
   @@index([personId])
   @@index([articleCode])
+}
+
+model BankRelation {
+  id          String    @id @default(uuid()) @db.Uuid
+  personId    String    @db.Uuid
+  person      Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
+  bankName    String
+  accountHint String?
+  role        String?
+  bik         String?
+  extras      Json?
+  provenance  Json
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  @@index([personId])
+  @@index([bankName])
 }
 
 model ReportImport {

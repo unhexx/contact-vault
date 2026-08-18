@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AddressSchema } from "../src/address.js";
+import { BankRelationSchema } from "../src/bank-relation.js";
 import { ContactPointSchema } from "../src/contact-point.js";
 import { IdentityDocumentSchema } from "../src/identity-document.js";
 import { IncidentSchema } from "../src/incident.js";
@@ -120,6 +121,7 @@ describe("PersonDraft vs Person (KD5)", () => {
       expect(r.data.documents).toEqual([]);
       expect(r.data.riskScores).toEqual([]);
       expect(r.data.incidents).toEqual([]);
+      expect(r.data.bankRelations).toEqual([]);
     }
   });
 
@@ -148,6 +150,24 @@ describe("PersonDraft vs Person (KD5)", () => {
     if (r.success) {
       expect(r.data.riskScores).toHaveLength(1);
       expect(r.data.incidents).toHaveLength(1);
+    }
+  });
+
+  it("accepts bankRelations on PersonDraft", () => {
+    const r = PersonDraftSchema.safeParse({
+      bankRelations: [
+        {
+          bankName: "ТестБанк",
+          accountHint: "ACCT-000001",
+          bik: "000000000",
+          provenance: [baseProv],
+        },
+      ],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.bankRelations).toHaveLength(1);
+      expect(r.data.bankRelations[0]?.bankName).toBe("ТестБанк");
     }
   });
 
@@ -422,6 +442,44 @@ describe("IncidentSchema", () => {
     const r = IncidentSchema.safeParse({
       title: "no severity",
       provenance: [baseProv],
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
+describe("BankRelationSchema", () => {
+  it("accepts bankName with provenance", () => {
+    const r = BankRelationSchema.safeParse({
+      bankName: "ТестБанк",
+      provenance: [baseProv],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it("trims bankName", () => {
+    const r = BankRelationSchema.safeParse({
+      bankName: "  ТестБанк  ",
+      provenance: [baseProv],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.bankName).toBe("ТестБанк");
+  });
+
+  it("rejects empty or whitespace-only bankName", () => {
+    expect(
+      BankRelationSchema.safeParse({ bankName: "", provenance: [baseProv] })
+        .success,
+    ).toBe(false);
+    expect(
+      BankRelationSchema.safeParse({ bankName: "   ", provenance: [baseProv] })
+        .success,
+    ).toBe(false);
+  });
+
+  it("requires at least one provenance entry", () => {
+    const r = BankRelationSchema.safeParse({
+      bankName: "ТестБанк",
+      provenance: [],
     });
     expect(r.success).toBe(false);
   });

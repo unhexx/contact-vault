@@ -1,5 +1,6 @@
 import type {
   Address,
+  BankRelation,
   ContactPoint,
   IdentityDocument,
   NameVariant,
@@ -42,6 +43,23 @@ const MAPPED_DATA_KEYS = new Set([
   "connections",
   "family",
   "social_profiles",
+  "banks",
+]);
+
+const KNOWN_BANK_KEYS = new Set([
+  "name",
+  "bank",
+  "bank_name",
+  "bankName",
+  "title",
+  "account",
+  "account_number",
+  "accountHint",
+  "account_hint",
+  "account_no",
+  "role",
+  "bik",
+  "bic",
 ]);
 
 export type CollectPersonResult = {
@@ -103,6 +121,7 @@ export function collectPersonFromEmbed(
   const documents: IdentityDocument[] = [];
   const addresses: Address[] = [];
   const relationships: Relationship[] = [];
+  const bankRelations: BankRelation[] = [];
   const nameVariants: NameVariant[] = [];
   let dateOfBirth: string | undefined;
   let placeOfBirth: string | undefined;
@@ -330,6 +349,54 @@ export function collectPersonFromEmbed(
     }
   }
 
+  // --- banks → BankRelation (v0.3 / PRD G1) ---
+  for (const item of asArray(data.banks)) {
+    if (!isRecord(item)) continue;
+    const bankName =
+      asString(item.name) ??
+      asString(item.bank) ??
+      asString(item.bank_name) ??
+      asString(item.bankName) ??
+      asString(item.title);
+    if (!bankName) {
+      warnings.push({
+        code: "EMPTY_SECTION",
+        message: "Bank entry missing name",
+        section: "banks",
+        severity: "warn",
+      });
+      continue;
+    }
+    const accountHint =
+      asString(item.accountHint) ??
+      asString(item.account_hint) ??
+      asString(item.account) ??
+      asString(item.account_number) ??
+      asString(item.account_no);
+    const role = asString(item.role);
+    const bik = asString(item.bik) ?? asString(item.bic);
+    const extras: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(item)) {
+      if (!KNOWN_BANK_KEYS.has(k)) extras[k] = v;
+    }
+    const bank: BankRelation = {
+      bankName,
+      provenance: [
+        makeProvenance({
+          ...provBase,
+          section: "banks",
+          originalKey: "name",
+          originalValue: bankName,
+        }),
+      ],
+    };
+    if (accountHint) bank.accountHint = accountHint;
+    if (role) bank.role = role;
+    if (bik) bank.bik = bik;
+    if (Object.keys(extras).length > 0) bank.extras = extras;
+    bankRelations.push(bank);
+  }
+
   // --- connections / family → Relationship only (KD17) ---
   const connectionItems = [
     ...asArray(data.connections),
@@ -391,6 +458,7 @@ export function collectPersonFromEmbed(
     relationships,
     riskScores: [],
     incidents: [],
+    bankRelations,
   };
   if (canonicalName) person.canonicalName = canonicalName;
   if (dateOfBirth) person.dateOfBirth = dateOfBirth;

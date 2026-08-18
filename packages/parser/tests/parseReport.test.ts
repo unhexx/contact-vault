@@ -26,6 +26,7 @@ function everyFactHasReportId(
     documents: IdentityDocument[];
     addresses: { provenance: { reportId: string }[] }[];
     relationships: { provenance: { reportId: string }[] }[];
+    bankRelations?: { provenance: { reportId: string }[] }[];
     nameVariants: { provenance: { reportId: string }[] }[];
     canonicalName?: { provenance: { reportId: string }[] };
   },
@@ -36,6 +37,7 @@ function everyFactHasReportId(
     ...person.documents,
     ...person.addresses,
     ...person.relationships,
+    ...(person.bankRelations ?? []),
     ...person.nameVariants,
     ...(person.canonicalName ? [person.canonicalName] : []),
   ];
@@ -93,10 +95,11 @@ describe("parseReport void-html", () => {
     expect(person.relationships[0]?.relationLabel).toBe("ребенок");
     expect(person.relationships[0]?.type).toBe("family");
 
-    // UNMAPPED_SECTION for banks
+    expect(person.bankRelations).toHaveLength(1);
+    expect(person.bankRelations[0]?.bankName).toBe("ТестБанк");
     expect(
       result.warnings.some((w) => w.code === "UNMAPPED_SECTION" && w.key === "banks"),
-    ).toBe(true);
+    ).toBe(false);
 
     expect(everyFactHasReportId(person, REPORT_ID)).toBe(true);
 

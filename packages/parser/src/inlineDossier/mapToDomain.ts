@@ -905,6 +905,7 @@ export function mapInlineToDomain(
     relationships: acc.relationships, // KD38 authority
     riskScores: acc.riskScores,
     incidents: acc.incidents,
+    bankRelations: [],
   };
   if (acc.canonicalName) person.canonicalName = acc.canonicalName;
   if (acc.dateOfBirth) person.dateOfBirth = acc.dateOfBirth;

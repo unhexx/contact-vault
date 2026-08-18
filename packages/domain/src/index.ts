@@ -37,6 +37,9 @@ export { RiskScoreSchema, type RiskScore } from "./risk-score.js";
 // Incident (v0.1.1)
 export { IncidentSchema, type Incident } from "./incident.js";
 
+// Bank relation (v0.3)
+export { BankRelationSchema, type BankRelation } from "./bank-relation.js";
+
 // Person draft vs person (KD5)
 export {
   NameVariantSchema,

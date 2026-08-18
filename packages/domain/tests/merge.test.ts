@@ -29,6 +29,7 @@ function draft(partial: Partial<PersonDraft>): PersonDraft {
     relationships: [],
     riskScores: [],
     incidents: [],
+    bankRelations: [],
     ...partial,
   };
 }

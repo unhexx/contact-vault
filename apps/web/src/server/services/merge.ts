@@ -44,6 +44,7 @@ type MergeChildren = {
   personSourceReports: SourceReportRow[];
   riskScores: { id: string }[];
   incidents: { id: string }[];
+  bankRelations: { id: string }[];
 };
 
 export type MergePersonsParams = {
@@ -75,6 +76,7 @@ type EntityCounts = {
   personSourceReports: number;
   riskScores: number;
   incidents: number;
+  bankRelations: number;
 };
 
 function toJson(value: unknown): Prisma.InputJsonValue {
@@ -176,6 +178,7 @@ async function loadMergeChildren(
     personSourceReports,
     riskScores,
     incidents,
+    bankRelations,
   ] = await Promise.all([
     db.contactPoint.findMany({
       where: { personId, deletedAt: null },
@@ -204,6 +207,10 @@ async function loadMergeChildren(
       where: { personId, deletedAt: null },
       select: { id: true },
     }),
+    db.bankRelation.findMany({
+      where: { personId, deletedAt: null },
+      select: { id: true },
+    }),
   ]);
   return {
     contactPoints,
@@ -214,6 +221,7 @@ async function loadMergeChildren(
     personSourceReports,
     riskScores,
     incidents,
+    bankRelations,
   };
 }
 
@@ -227,6 +235,7 @@ function countsFromChildren(kids: MergeChildren): EntityCounts {
     personSourceReports: kids.personSourceReports.length,
     riskScores: kids.riskScores.length,
     incidents: kids.incidents.length,
+    bankRelations: kids.bankRelations.length,
   };
 }
 
@@ -431,6 +440,7 @@ export async function mergePersons(
         personSourceReports: [] as string[],
         riskScores: [] as string[],
         incidents: [] as string[],
+        bankRelations: [] as string[],
       };
       const skippedPersonSourceReportIds: string[] = [];
       const mergedIntoExisting: Array<{
@@ -577,6 +587,15 @@ export async function mergePersons(
           data: { personId: targetPersonId },
         });
         movedEntityIds.incidents.push(...incidentIds);
+      }
+
+      const bankIds = sourceKids.bankRelations.map((r) => r.id);
+      if (bankIds.length > 0) {
+        await tx.bankRelation.updateMany({
+          where: { id: { in: bankIds } },
+          data: { personId: targetPersonId },
+        });
+        movedEntityIds.bankRelations.push(...bankIds);
       }
 
       const targetPsrByReport = new Set(
