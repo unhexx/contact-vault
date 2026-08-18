@@ -165,7 +165,7 @@ Playwright is **not** required for v0.4.0. Use the UI and/or `pnpm smoke`:
 | [docs/03-ARCHITECTURE/](docs/03-ARCHITECTURE/) | Architecture + ADRs |
 | [docs/06-ENGINEERING/Agent-Playbook.md](docs/06-ENGINEERING/Agent-Playbook.md) | **How NN agents must work** |
 | [docs/07-ROADMAP/MVP-Scope.md](docs/07-ROADMAP/MVP-Scope.md) | v0.1.0 checklist (complete) |
-| [docs/07-ROADMAP/Roadmap.md](docs/07-ROADMAP/Roadmap.md) | Research notes + later plan (v0.4.0 shipped) |
+| [docs/07-ROADMAP/Roadmap.md](docs/07-ROADMAP/Roadmap.md) | Research notes + later plan (v0.4.0 shipped; v0.5 planned) |
 | [docs/08-LEGAL-ETHICS/Data-Handling.md](docs/08-LEGAL-ETHICS/Data-Handling.md) | PII / fixtures policy |
 
 ## Ethics & Legal

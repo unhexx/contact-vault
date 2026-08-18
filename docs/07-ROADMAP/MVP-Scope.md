@@ -37,6 +37,10 @@ v0.1.0 is **shipped**. v0.1.1, v0.2.0, v0.3.0, v0.4.0, and later versions live i
 
 Research (see Roadmap) changed the original vehicles-first sketch. **Bank relations** shipped first (PRD G1 / Void `banks`), then Vehicles (**Assets**) and Employment / FinancialFact (**Work**). Vehicle **photo** pipelines remain out of scope.
 
+## v0.5 note
+
+Research (see Roadmap) picks **optional at-rest encryption of report blobs** as the first v0.5 increment (PRD Risk / Data-Handling / GDPR Art. 32). `STORE_RAW_REPORTS` already writes optional plaintext `data/reports/{id}.bin`. Document-number ciphertext, multi-user auth, graph visualization, and `pg_trgm` stay later. Vehicle photo, bank-name matching, PAN-as-identity, and employment graph stay out.
+
 ## Checklist (v0.1.0)
 
 1. [x] Core documentation package (incl. dual-format mapping)

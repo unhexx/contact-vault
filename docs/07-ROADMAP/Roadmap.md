@@ -1,6 +1,6 @@
 # Contact Vault Roadmap
 
-Living plan after **v0.4.0**. Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
+Living plan after **v0.4.0**. Next release is **v0.5** (optional at-rest protection; report blobs first). Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
 
 ## Research notes (2026-08-18)
 
@@ -62,10 +62,44 @@ CDD / FATF Rec. 10 order after identity: bank relations first (PRD G1), then veh
 
 `merge.undo` restores no-collision and collision-path merges from the audit event (`targetScalarsBefore` + `targetProvenanceBefore`; colliding contact/doc soft-deleted on source, skipped PSR kept). Contact 360 Timeline **Undo merge** calls it; disabled when `mergeUndoBlockReason` is set (legacy hard-delete / missing scalars) or the merge is already undone / superseded.
 
+## Next release: v0.5 — optional at-rest protection
+
+### Research notes (2026-08-18, v0.5)
+
+Contact Vault is still a **provenance-first dossier vault**, not an outreach CRM. Identity, CDD facts, and reversible merge are shipped. The remaining gap named in the PRD is **PII handling**, not another matching rule or a graph UI.
+
+PRD **Risk** already deferred “encryption options later.” PRD NFR is local-first: data never leaves the deployment without operator action. [Data-Handling.md](../08-LEGAL-ETHICS/Data-Handling.md) lists the engineering control as **optional encryption at rest for report blobs and document numbers**. Architecture is still **single-user local first**; `STORE_RAW_REPORTS` already writes optional plaintext bodies to `data/reports/{id}.bin`.
+
+This is not a networking-CRM “add auth then a graph” sketch. After v0.3 the stored dossier includes passports, SNILS, bank relations, vehicles, employment, and income. FATF Rec. 10 / Rec. 11 require retaining that CDD evidence; the **original report file** is the complete evidence dump. GDPR Art. 32(1)(a) names encryption as an appropriate technical measure; Art. 34(3)(a) treats data that remains unintelligible after a breach as a reason not to notify every data subject. ICO guidance: if you store personal data, use encryption and have a policy. NIST SP 800-111: AES for storage encryption; distinguish full-disk / volume encryption from application-level file encryption.
+
+Stock PostgreSQL 16 has **no TDE** (ADR-002). Operator LUKS / volume encryption is complementary and stays the host’s job. It does **not** replace application-level blob encryption: a SQL dump, a copied `data/reports/*.bin`, or a DB superuser still sees plaintext. `pgcrypto` is not the first increment (community quality / “encrypt in the database” still leaves the key next to the rows).
+
+| Priority | Slice | Why this order |
+|----------|--------|----------------|
+| 1 | **Optional report-blob encryption** | Data-Handling names **report blobs** first. `STORE_RAW_REPORTS` + `rawStorage` already exist. The file is not a merge or list-search key. `contentHash` stays SHA-256 of **normalized plaintext** (do not re-hash ciphertext). Envelope: AES-256-GCM, operator key from env, ciphertext in the existing `{id}.bin` path. Off by default (PII minimization: default is hash + metadata only). |
+| 2 | Document-number ciphertext | Data-Handling’s second item. `numberNorm` is an exact merge key and list-search field (G2). Encrypting it without an HMAC / blind index breaks search. After blobs. |
+| 3 | Multi-user auth | Architecture is still single-user. Login without encrypted blobs leaves disk / backups readable. Not multi-tenant SaaS (PRD non-goal). |
+
+**Modeling rules (same provenance discipline as import):**
+
+- Optional. `STORE_RAW_REPORTS=false` (default) stores no body. No key required.
+- `STORE_RAW_REPORTS=true` without a key keeps today’s plaintext files; document the residual risk. With a key, write an envelope (`alg` + nonce + ciphertext) — never a second content hash.
+- `contentHash` / idempotency always hash **plaintext**. Timeline still shows that hash.
+- Wrong or missing key on a ciphertext file: fail closed. Do not treat ciphertext as report text.
+- Key material is env-only. Never commit keys. Never log key bytes or full document numbers.
+- Do **not** encrypt `e164` / `emailNorm` / `numberNorm` this release (merge + search keys).
+- JSContact export and merge undo are unchanged.
+
+**Skip this release:** vehicle photo / lightbox, payment-card PAN as a searchable identity, bank-name matching, employment graph, inventing Postgres TDE, graph visualization (PRD non-goal; Relationship stays a hint), `pg_trgm` / weighted fuzzy (no suggestion-volume justification; name+partial-DOB already shipped).
+
+### v0.5.x slices
+
+- [ ] Optional AES-256-GCM on `STORE_RAW_REPORTS` blobs + env key + round-trip tests (first increment).
+- [ ] IdentityDocument number ciphertext + searchable HMAC / blind index (after blobs).
+- [ ] Multi-user auth (after blobs; still not multi-tenant SaaS).
+
 ## Later
 
-- Optional at-rest encryption.
-- Multi-user auth.
 - Graph visualization of relationships.
 - Optional `pg_trgm` / weighted fuzzy once suggestion volume justifies it.
 

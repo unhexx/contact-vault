@@ -36,6 +36,6 @@ Load Person + children. Group by section. Every value copyable and source-badged
 
 - Auth: single-user local first
 - i18n: next-intl (RU/EN)
-- PII: never log full document numbers at info level
+- PII: never log full document numbers at info level; optional encrypted raw-report blobs are the v0.5 plan (not TDE)
 
 See ADRs for detailed decisions.

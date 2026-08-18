@@ -307,6 +307,7 @@ Supporting types (`TravelRecord`, `PaymentCard`, `PhoneReputation`) follow the s
 - BankRelation is a first-class child (v0.3). Merge always-moves bank rows. Bank name is not a matching key.
 - Employment and FinancialFact are first-class children (v0.3). Merge always-moves those rows. Employer / income is not a matching key.
 - Person 360 **import timeline** is append-only: `PersonSourceReport` / ReportImport rows plus `audit_log` for that Person (`import` via source link, `merge` / `unmerge` / `dismiss` / `soft_delete`). Newest first. Do not collapse or rewrite history.
+- `contentHash` is SHA-256 of **normalized plaintext**. Optional raw-blob encryption (v0.5) must not re-hash ciphertext or change the algorithm.
 - Soft-delete only; hard delete is a privileged, logged operation.
 - Confidence scores are informational; UI must always show sources.
 - Criminal / scoring data is first-class (RiskScore + Incident), not free-text notes.
