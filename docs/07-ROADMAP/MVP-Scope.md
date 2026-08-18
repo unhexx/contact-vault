@@ -42,3 +42,7 @@ Full vehicle photo pipelines, full financials/flights/incidents UI, advanced fuz
 ## Success criterion
 
 An agent following only the docs can import the attached-style `.txt` report **and** a Void HTML report, producing structured Contact 360 views without clarifying domain questions.
+
+---
+
+v0.1.0 is **shipped**. Subsequent versions, research notes, and the v0.1.1 third-format + risk slice live in [Roadmap.md](./Roadmap.md).

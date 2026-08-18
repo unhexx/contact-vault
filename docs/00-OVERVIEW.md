@@ -17,7 +17,7 @@ Development is expected to be performed primarily by neural-network coding agent
 
 ## Current phase
 
-**Documentation + scaffold.** Implementation of parser, domain services, and UI begins after the core docs and package skeletons are stable.
+**v0.1.0 shipped** (dual-format import, Person 360, exact-match merge). Next: **v0.1.1** third format (`inline-dossier`) + Risk/Incident on 360. See [docs/07-ROADMAP/Roadmap.md](07-ROADMAP/Roadmap.md).
 
 ## Key design goals
 
