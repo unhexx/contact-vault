@@ -45,4 +45,4 @@ An agent following only the docs can import the attached-style `.txt` report **a
 
 ---
 
-v0.1.0 is **shipped**. v0.1.1 (third format + risk) and later versions live in [Roadmap.md](./Roadmap.md).
+v0.1.0 is **shipped**. v0.1.1, v0.2.0, and later versions live in [Roadmap.md](./Roadmap.md).

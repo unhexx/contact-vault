@@ -1,5 +1,5 @@
 /**
- * Local smoke import (v0.1.1 release gate).
+ * Local smoke import (v0.2.0 release gate).
  *
  * Exercises three-format import (sectioned-text, void-html, inline-dossier),
  * re-import idempotency, merge accept path, and soft-delete against Docker
@@ -126,13 +126,19 @@ async function main(): Promise<void> {
     );
 
     // --- 3. inline-dossier import (scoring → riskScores + incidents on get360) ---
-    // Unique-ify all exact-match keys so this step does not collide with prior imports
-    // (phone/email/passport/SNILS/INN + related phone — avoids Merge Inbox noise).
+    // Unique-ify exact-match keys and name+DOB so leftover smoke rows (and
+    // earlier steps in this run) do not open v0.2 fuzzy suggestions.
     const stamp = String(Date.now()).slice(-7);
     const passSerial = stamp.slice(0, 6).padStart(6, "0");
     const snilsBody = `${stamp.slice(0, 3)}-${stamp.slice(3, 6)}-${stamp.slice(0, 3)}`;
     const inn = `9${stamp.padStart(11, "0")}`;
+    const dobYear = 1960 + (Number(stamp) % 29);
+    const relatedYear = 2000 + (Number(stamp) % 14);
     const inlineBase = load(samples.inlineDossier)
+      .replace(/Тестов Тест Тестович/g, `Дымов${stamp} Тест Тестович`)
+      .replace(/Тестова Анна Тестовна/g, `Дымова${stamp} Анна Тестовна`)
+      .replace(/15\.01\.1990/g, `15.01.${dobYear}`)
+      .replace(/01\.03\.2015/g, `01.03.${relatedYear}`)
       .replace(/\+7 900 000-00-01/g, `+7 900 ${stamp}`)
       .replace(/\+7 900 000-00-02/g, `+7 901 ${stamp}`)
       .replace(
@@ -161,7 +167,7 @@ async function main(): Promise<void> {
     );
     assert(
       rInline.mergeSuggestions.length === 0,
-      `inline-dossier step must not exact-match prior persons (got ${rInline.mergeSuggestions.length} suggestion(s))`,
+      `inline-dossier step must not match prior persons (got ${rInline.mergeSuggestions.length} suggestion(s))`,
     );
     const personInline = rInline.personIds[0]!;
     const viewInline = await personRepo.get360(personInline);

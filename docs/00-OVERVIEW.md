@@ -17,7 +17,7 @@ Development is expected to be performed primarily by neural-network coding agent
 
 ## Current phase
 
-**v0.1.1** — three ingestion formats, Contact 360 (including Risk), exact-match merge suggestions. See [docs/07-ROADMAP/Roadmap.md](07-ROADMAP/Roadmap.md).
+**v0.2.0** — three ingestion formats, Contact 360 (Risk + Timeline), exact and name+partial-DOB merge suggestions, JSContact Card export. See [docs/07-ROADMAP/Roadmap.md](07-ROADMAP/Roadmap.md).
 
 ## Supported formats
 

@@ -1,6 +1,6 @@
 # Contact Vault Roadmap
 
-Living plan after **v0.1.1**. Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
+Living plan after **v0.2.0**. Historical MVP checklist stays in [MVP-Scope.md](./MVP-Scope.md).
 
 ## Research notes (2026-08-18)
 
@@ -46,30 +46,18 @@ Dual-format import (`void-html`, `sectioned-text`), Person 360, exact-match merg
 
 Inline-dossier / scoring import; `RiskScore` + `Incident` on the Person draft; Contact 360 **Risk** tab; merge always-moves those children; unknown format still stays unknown.
 
-List search already matches `canonicalFull` / `nameVariants`, phone `e164`, `emailNorm`, and document `numberNorm` (including dashed SNILS). That item is **not** open work for v0.2.
+List search already matches `canonicalFull` / `nameVariants`, phone `e164`, `emailNorm`, and document `numberNorm` (including dashed SNILS).
 
-## Next release: v0.2 — operator quality (this ship)
+### v0.2.0 — operator quality
 
-**Goal:** Operators can find likely-same people without a shared phone/email/doc, see the import/audit chain on a person, and export identity + contact points as a JSContact Card. No silent merge. No domain rewrite.
+Fuzzy name + compatible partial-DOB merge *suggestions* (no silent merge); Contact 360 **Timeline** (append-only import + audit events); JSContact Card export of identity + contact points (RFC 9553 / RFC 9982 `version: "2.0"`, `uid` = Person id). Extras colliding with reserved Card keys are vendor-prefixed `contact-vault.local:`. Social/messenger points are not exported.
 
-| # | Slice | Delivery |
-|---|-------|----------|
-| 1 | Fuzzy matching (name + partial DOB) | **Done.** Matching rule only: `isLikelySamePerson` on canonical/variants **and** compatible partial DOB (equal or hyphen-boundary prefix). Conflicting full dates → no hit. Missing DOB → no hit. `matchedOn` emits `name` + `dob`. Inbox UI unchanged. No silent merge. |
-| 2 | Import timeline | **Done.** Append-only Contact 360 Timeline tab from `PersonSourceReport` / ReportImport + `audit_log` (`listForEntity("Person", id)`). Shows action, actor, timestamp, contentHash, format. Newest first. Dismiss writes Person audit events. No collapse / rewrite. |
-| 3 | JSContact export | **Done.** Mapper + Contact 360 download of identity + contact points: `@type: Card`, `version: "2.0"`, `uid` = Person id, `kind: individual`, `name` components, `phones` / `emails` maps. Extras pass through as unknown / vendor-prefixed properties. **Not** documents / risk / incidents. **Not** a Prisma/Zod rewrite. |
-
-**Success:** two people with the same last+first (or token-prefix FIO) and compatible partial DOB get an **open suggestion** and nothing is merged until accept; 360 shows import + merge/dismiss events in time order; exporting a person yields a Card whose `uid` is the Person UUID and whose phones/emails round-trip the stored points; `pnpm test` + `pnpm check:fixtures` stay green; unknown format stays unknown.
-
-**Still out of this release:** Vehicles / Financials / Flights tabs, reversible merge, numeric fuzzy thresholds / `pg_trgm`, multi-user auth, graph UI, LinkedIn/reminders.
-
-## Later
-
-### v0.3 — rest of the dossier UI
+## Next release: v0.3 — rest of the dossier UI
 
 - Vehicles, employment / financial facts, bank relations as 360 tabs (types already in Domain-Model).
 - Void HTML collectors for banks / vehicles where the embed already has them (PRD G1).
 
-### Later still
+## Later
 
 - Reversible merge (undo from audit event).
 - Optional at-rest encryption.
