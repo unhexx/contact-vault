@@ -241,7 +241,7 @@ function MergeSuggestionsPanel({
       </div>
       <p className="text-xs text-muted-foreground">
         Accept merges new → target (survivor). Dismiss keeps both. After accept,
-        review Timeline on the survivor to confirm imports from both persons.
+        review Timeline on the survivor; Undo merge is on that Merge event.
       </p>
       {isLoading ? (
         <Skeleton className="h-32 w-full" />

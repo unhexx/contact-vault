@@ -36,7 +36,8 @@ export function MergeInbox() {
         <p className="text-sm text-muted-foreground">
           Exact-match suggestions only. Review matched fields and collisions,
           then <strong>Accept</strong> (new → target survivor) or{" "}
-          <strong>Dismiss</strong> (keep both). No silent merge.
+          <strong>Dismiss</strong> (keep both). No silent merge. Undo a
+          completed merge from the survivor&apos;s Timeline tab.
         </p>
       </div>
 

@@ -7,6 +7,7 @@ import type { Person, TimelineEvent } from "@contact-vault/domain";
 
 import { CopyField } from "@/components/copy-field";
 import { SourceBadge } from "@/components/source-badge";
+import { TimelineMergeUndo } from "@/components/timeline-merge-undo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -1246,7 +1247,8 @@ export function TimelineTab({
       <CardHeader>
         <CardTitle className="text-base">Import timeline</CardTitle>
         <CardDescription>
-          Append-only import and audit chain, newest first
+          Append-only import and audit chain, newest first. Undo a restorable
+          merge from its Merge event.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -1275,6 +1277,7 @@ export function TimelineTab({
                   />
                 </div>
               ) : null}
+              <TimelineMergeUndo event={event} events={events} />
             </li>
           ))}
         </ol>

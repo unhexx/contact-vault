@@ -58,9 +58,12 @@ BankRelation from void-html `data.banks` + Contact 360 **Banks** (name required;
 
 CDD / FATF Rec. 10 order after identity: bank relations first (PRD G1), then vehicles, then employment / income. Vehicle photo/lightbox, payment-card PAN as a searchable identity, bank-name matching, and employment graph stayed out.
 
+### v0.4 (in progress) — reversible merge
+
+`merge.undo` restores no-collision and collision-path merges from the audit event (`targetScalarsBefore` + `targetProvenanceBefore`; colliding contact/doc soft-deleted on source, skipped PSR kept). Contact 360 Timeline **Undo merge** calls it; disabled when `mergeUndoBlockReason` is set (legacy hard-delete / missing scalars) or the merge is already undone / superseded.
+
 ## Later
 
-- Reversible merge: operator undo UI. In-tree: `merge.undo` restores no-collision and collision-path merges from the audit event (`targetScalarsBefore` + `targetProvenanceBefore`; colliding contact/doc soft-deleted on source, skipped PSR kept). No UI.
 - Optional at-rest encryption.
 - Multi-user auth.
 - Graph visualization of relationships.

@@ -6,6 +6,8 @@ import {
   formatMatchedOn,
   matchedFieldLabel,
   mergeDirectionLabel,
+  mergeUndoDisabledReason,
+  mergeUndoReasonLabel,
   totalEntityCount,
   type EntityCounts,
 } from "./merge-ui.js";
@@ -76,5 +78,165 @@ describe("merge-ui helpers", () => {
   it("documents fixed merge direction", () => {
     expect(mergeDirectionLabel()).toContain("→");
     expect(mergeDirectionLabel().toLowerCase()).toContain("survivor");
+  });
+});
+
+const sourcePersonId = "11111111-1111-4111-8111-111111111111";
+const targetPersonId = "22222222-2222-4222-8222-222222222222";
+const childId = "33333333-3333-4333-8333-333333333333";
+const mergeEventId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const laterMergeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const unmergeId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+const scalars = {
+  canonicalFull: "Цель Цельевна",
+  canonicalLast: "Цель",
+  canonicalFirst: "Цельевна",
+  canonicalMiddle: null,
+  dateOfBirth: "1980-02-02",
+  placeOfBirth: null,
+  gender: "female",
+  extras: null,
+};
+
+const undoablePayload = {
+  sourcePersonId,
+  targetPersonId,
+  movedEntityIds: { addresses: [childId] },
+  skippedPersonSourceReportIds: [],
+  mergedIntoExisting: [],
+  suggestionId: null,
+  targetScalarsBefore: scalars,
+  dismissedSuggestionIds: [],
+};
+
+describe("merge undo UI policy", () => {
+  it("offers undo for a restorable no-collision merge", () => {
+    expect(
+      mergeUndoDisabledReason({
+        id: mergeEventId,
+        action: "merge",
+        at: "2026-08-18T10:00:00.000Z",
+        payload: undoablePayload,
+      }),
+    ).toBeNull();
+  });
+
+  it("offers undo for collision-path merges that recorded targetProvenanceBefore", () => {
+    expect(
+      mergeUndoDisabledReason({
+        id: mergeEventId,
+        action: "merge",
+        at: "2026-08-18T10:00:00.000Z",
+        payload: {
+          ...undoablePayload,
+          mergedIntoExisting: [
+            {
+              entityType: "ContactPoint",
+              entityId: childId,
+              fromSourceEntityId: "44444444-4444-4444-8444-444444444444",
+            },
+          ],
+          targetProvenanceBefore: [
+            { entityType: "ContactPoint", entityId: childId, provenance: [] },
+          ],
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("disables undo when mergeUndoBlockReason is set", () => {
+    expect(
+      mergeUndoDisabledReason({
+        id: mergeEventId,
+        action: "merge",
+        at: "2026-08-18T10:00:00.000Z",
+        payload: {
+          sourcePersonId,
+          targetPersonId,
+          movedEntityIds: {},
+        },
+      }),
+    ).toBe("missing_target_scalars");
+
+    expect(
+      mergeUndoDisabledReason({
+        id: mergeEventId,
+        action: "merge",
+        at: "2026-08-18T10:00:00.000Z",
+        payload: {
+          ...undoablePayload,
+          mergedIntoExisting: [
+            {
+              entityType: "ContactPoint",
+              entityId: childId,
+              fromSourceEntityId: "44444444-4444-4444-8444-444444444444",
+            },
+          ],
+        },
+      }),
+    ).toBe("has_collisions");
+
+    expect(
+      mergeUndoDisabledReason({
+        id: mergeEventId,
+        action: "merge",
+        at: "2026-08-18T10:00:00.000Z",
+        payload: {
+          ...undoablePayload,
+          skippedPersonSourceReportIds: [childId],
+        },
+      }),
+    ).toBe("has_skipped_psr");
+  });
+
+  it("disables undo when a sibling unmerge already references the event", () => {
+    const event = {
+      id: mergeEventId,
+      action: "merge",
+      at: "2026-08-18T10:00:00.000Z",
+      payload: undoablePayload,
+    };
+    expect(
+      mergeUndoDisabledReason(event, [
+        event,
+        {
+          id: unmergeId,
+          action: "unmerge",
+          at: "2026-08-18T11:00:00.000Z",
+          payload: {
+            mergeAuditId: mergeEventId,
+            sourcePersonId,
+            targetPersonId,
+          },
+        },
+      ]),
+    ).toBe("already_undone");
+  });
+
+  it("disables undo when a later merge superseded this event", () => {
+    const event = {
+      id: mergeEventId,
+      action: "merge",
+      at: "2026-08-18T10:00:00.000Z",
+      payload: undoablePayload,
+    };
+    expect(
+      mergeUndoDisabledReason(event, [
+        {
+          id: laterMergeId,
+          action: "merge",
+          at: "2026-08-18T12:00:00.000Z",
+          payload: undoablePayload,
+        },
+        event,
+      ]),
+    ).toBe("superseded");
+  });
+
+  it("labels operator-facing disable reasons", () => {
+    expect(mergeUndoReasonLabel("missing_target_scalars")).toMatch(/legacy/i);
+    expect(mergeUndoReasonLabel("has_collisions")).toMatch(/collision/i);
+    expect(mergeUndoReasonLabel("already_undone")).toMatch(/already undone/i);
   });
 });
