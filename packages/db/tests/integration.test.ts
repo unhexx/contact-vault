@@ -234,6 +234,71 @@ describe.skipIf(!hasDb)("db integration", () => {
     expect(docHits[0]?.matchedOn[0]?.field).toBe("document");
   });
 
+  it("findByNameAndDob suggests last+first + prefix DOB and skips conflicts/missing", async () => {
+    const reportA = await ensureReportImport(ctx);
+    const personA = await ctx.persons.createFromDraft(
+      draftPerson({
+        reportId: reportA.id,
+        name: SYNTH.nameA,
+        dateOfBirth: "1990-01-15",
+      }),
+      {
+        reportImportId: reportA.id,
+        contentHash: reportA.contentHash,
+        query: "name-a",
+        mode: "void_html",
+      },
+    );
+
+    const reportConflict = await ensureReportImport(ctx);
+    await ctx.persons.createFromDraft(
+      draftPerson({
+        reportId: reportConflict.id,
+        name: SYNTH.nameA,
+        dateOfBirth: "1991-01-15",
+      }),
+      {
+        reportImportId: reportConflict.id,
+        contentHash: reportConflict.contentHash,
+        query: "name-conflict",
+        mode: "void_html",
+      },
+    );
+
+    const reportNoDob = await ensureReportImport(ctx);
+    await ctx.persons.createFromDraft(
+      draftPerson({
+        reportId: reportNoDob.id,
+        name: SYNTH.nameA,
+      }),
+      {
+        reportImportId: reportNoDob.id,
+        contentHash: reportNoDob.contentHash,
+        query: "name-nodob",
+        mode: "void_html",
+      },
+    );
+
+    const hits = await ctx.persons.findByNameAndDob({
+      names: ["Тестов Тест"],
+      dateOfBirth: "1990",
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.personId).toBe(personA.id);
+    expect(hits[0]?.matchedOn.map((m) => m.field).sort()).toEqual(["dob", "name"]);
+
+    const missing = await ctx.persons.findByNameAndDob({
+      names: ["Тестов Тест"],
+    });
+    expect(missing).toEqual([]);
+
+    const excluded = await ctx.persons.findByNameAndDob(
+      { names: ["Тестов Тест"], dateOfBirth: "1990" },
+      { excludePersonIds: [personA.id] },
+    );
+    expect(excluded).toEqual([]);
+  });
+
   it("softDelete hides from list and get360; dismisses open suggestions", async () => {
     const reportA = await ensureReportImport(ctx);
     const personA = await ctx.persons.createFromDraft(

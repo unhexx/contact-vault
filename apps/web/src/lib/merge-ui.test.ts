@@ -15,6 +15,8 @@ describe("merge-ui helpers", () => {
     expect(matchedFieldLabel("phone")).toBe("Phone");
     expect(matchedFieldLabel("email")).toBe("Email");
     expect(matchedFieldLabel("document")).toBe("Document");
+    expect(matchedFieldLabel("name")).toBe("Name");
+    expect(matchedFieldLabel("dob")).toBe("Date of birth");
     expect(matchedFieldLabel("other")).toBe("other");
   });
 

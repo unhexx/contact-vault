@@ -44,7 +44,7 @@ export type CreateFromDraftContext = {
 };
 
 export type MatchedOnField = {
-  field: "phone" | "email" | "document";
+  field: "phone" | "email" | "document" | "name" | "dob";
   value: string;
 };
 
@@ -56,6 +56,11 @@ export type ExactMatchCandidate = {
 export type FindByExactKeysOpts = {
   /** Never return these person ids (defense in depth against self-match). */
   excludePersonIds?: string[];
+};
+
+export type NameDobQuery = {
+  names: string[];
+  dateOfBirth?: string;
 };
 
 export interface PersonRepository {
@@ -71,6 +76,11 @@ export interface PersonRepository {
   ): Promise<Person>;
   findByExactKeys(
     keys: ExactMatchKey[],
+    opts?: FindByExactKeysOpts,
+    tx?: DbClient,
+  ): Promise<ExactMatchCandidate[]>;
+  findByNameAndDob(
+    query: NameDobQuery,
     opts?: FindByExactKeysOpts,
     tx?: DbClient,
   ): Promise<ExactMatchCandidate[]>;

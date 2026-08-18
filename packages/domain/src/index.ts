@@ -1,7 +1,7 @@
 /**
  * @contact-vault/domain
  *
- * MVP contracts: Zod schemas, content-hash authority, exact-match merge helpers.
+ * MVP contracts: Zod schemas, content-hash authority, match helpers (exact + name/DOB).
  * No Prisma, no parser I/O.
  */
 
@@ -49,18 +49,35 @@ export {
 
 // Report import / merge suggestion
 export {
+  MatchedOnFieldSchema,
   MergeSuggestionSchema,
   ReportFormatSchema,
   type MergeSuggestion,
   type ReportFormat,
 } from "./report-import.js";
 
-// Exact-match helpers (KD3, KD12, KD15, KD21)
+// FIO / likely-same (parser + name+DOB matching)
 export {
+  fioEquals,
+  isLikelySamePerson,
+  parseFio,
+  type ParsedName,
+} from "./name.js";
+
+// Exact-match + name/DOB matching helpers (KD3, KD12, KD15, KD21)
+export {
+  collectPersonNames,
+  dobsCompatible,
   extractExactMatchKeys,
+  normalizeDobForMatch,
   normalizeDocumentNumber,
   normalizeEmail,
   scoreExactMatches,
+  scoreNameDobMatch,
+  unionMatchCandidates,
   type ExactMatchHit,
   type ExactMatchKey,
+  type MatchCandidate,
+  type MatchHit,
+  type MatchedOnKind,
 } from "./merge.js";

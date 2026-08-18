@@ -43,6 +43,8 @@ export function prov(reportId: string, sourceName = "fixture"): Provenance[] {
 export function draftPerson(opts: {
   reportId: string;
   name?: string;
+  dateOfBirth?: string;
+  nameVariants?: string[];
   phone?: string;
   email?: string;
   passport?: string;
@@ -88,7 +90,11 @@ export function draftPerson(opts: {
       first: name.split(" ")[1],
       provenance: p,
     },
-    nameVariants: [],
+    dateOfBirth: opts.dateOfBirth,
+    nameVariants: (opts.nameVariants ?? []).map((full) => ({
+      full,
+      provenance: p,
+    })),
     contactPoints,
     documents,
     addresses: [],

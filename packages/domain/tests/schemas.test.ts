@@ -304,6 +304,18 @@ describe("MergeSuggestionSchema", () => {
     });
     expect(r.success).toBe(false);
   });
+
+  it("accepts name + dob matchedOn (v0.2 matching rule)", () => {
+    const r = MergeSuggestionSchema.safeParse({
+      newPersonId: personA,
+      targetPersonId: personB,
+      matchedOn: [
+        { field: "name", value: "Тестов Тест Тестович" },
+        { field: "dob", value: "1990-01-15" },
+      ],
+    });
+    expect(r.success).toBe(true);
+  });
 });
 
 describe("RiskScoreSchema", () => {

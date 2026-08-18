@@ -253,6 +253,7 @@ Supporting types (`Employment`, `FinancialFact`, `TravelRecord`, `BankRelation`,
 ## Invariants & Rules
 
 - A Person should have at least one strong identifier (phone, email, passport, or high-confidence Name+DOB).
+- Matching rules produce `MergeSuggestion` only. Exact keys: phone e164 / emailNorm / document type+numberNorm. Name+DOB: `isLikelySamePerson` on canonical/variants **and** compatible partial DOB (equal or hyphen-boundary prefix). Missing DOB or conflicting full dates do not suggest. Never silent merge.
 - Merge is an explicit domain command that produces an audit event; it never happens silently.
 - Soft-delete only; hard delete is a privileged, logged operation.
 - Confidence scores are informational; UI must always show sources.

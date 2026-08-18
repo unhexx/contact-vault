@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  collectPersonNames,
+  dobsCompatible,
   extractExactMatchKeys,
   normalizeDocumentNumber,
   normalizeEmail,
   scoreExactMatches,
+  scoreNameDobMatch,
+  unionMatchCandidates,
 } from "../src/merge.js";
 import type { ContactPoint } from "../src/contact-point.js";
 import type { PersonDraft } from "../src/person.js";
@@ -249,5 +253,109 @@ describe("scoreExactMatches", () => {
       }),
     );
     expect(keys).toEqual([]);
+  });
+});
+
+describe("dobsCompatible", () => {
+  it("treats equal and hyphen-boundary prefixes as compatible", () => {
+    expect(dobsCompatible("1990-01-15", "1990-01-15")).toBe(true);
+    expect(dobsCompatible("1990", "1990-01-15")).toBe(true);
+    expect(dobsCompatible("1990-01-15", "1990-01")).toBe(true);
+    expect(dobsCompatible("15.01.1990", "1990")).toBe(true);
+  });
+
+  it("rejects missing, conflicting full dates, and month clashes", () => {
+    expect(dobsCompatible(undefined, "1990-01-15")).toBe(false);
+    expect(dobsCompatible("1990-01-15", "")).toBe(false);
+    expect(dobsCompatible("1990-01-15", "1991-01-15")).toBe(false);
+    expect(dobsCompatible("1990-01", "1990-02")).toBe(false);
+    expect(dobsCompatible("1990-01-15", "1990-01-16")).toBe(false);
+  });
+});
+
+describe("scoreNameDobMatch", () => {
+  it("hits last+first (or token-prefix FIO) with compatible partial DOB", () => {
+    const hits = scoreNameDobMatch(
+      { names: ["Тестов Тест"], dateOfBirth: "1990" },
+      { names: ["Тестов Тест Тестович"], dateOfBirth: "1990-01-15" },
+    );
+    expect(hits).toEqual([
+      { field: "name", value: "Тестов Тест" },
+      { field: "dob", value: "1990-01-15" },
+    ]);
+  });
+
+  it("does not hit when DOB is missing on either side", () => {
+    expect(
+      scoreNameDobMatch(
+        { names: ["Тестов Тест Тестович"], dateOfBirth: "1990-01-15" },
+        { names: ["Тестов Тест Тестович"] },
+      ),
+    ).toEqual([]);
+    expect(
+      scoreNameDobMatch(
+        { names: ["Тестов Тест Тестович"] },
+        { names: ["Тестов Тест Тестович"], dateOfBirth: "1990-01-15" },
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not hit on conflicting full dates", () => {
+    expect(
+      scoreNameDobMatch(
+        { names: ["Тестов Тест Тестович"], dateOfBirth: "1990-01-15" },
+        { names: ["Тестов Тест Тестович"], dateOfBirth: "1991-01-15" },
+      ),
+    ).toEqual([]);
+  });
+
+  it("does not hit on name-only or conflicting отчество", () => {
+    expect(
+      scoreNameDobMatch(
+        { names: ["Тестов Тест Тестович"], dateOfBirth: "1990-01-15" },
+        { names: ["Другов Друг Другович"], dateOfBirth: "1990-01-15" },
+      ),
+    ).toEqual([]);
+    expect(
+      scoreNameDobMatch(
+        { names: ["Тестов Тест Тестович"], dateOfBirth: "1990-01-15" },
+        { names: ["Тестов Тест Иванович"], dateOfBirth: "1990-01-15" },
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("collectPersonNames / unionMatchCandidates", () => {
+  it("dedupes canonical + variants", () => {
+    expect(
+      collectPersonNames({
+        canonicalName: { full: "Тестов Тест Тестович" },
+        canonicalFull: "Тестов Тест Тестович",
+        nameVariants: [{ full: "Тестов Тест" }, { full: "Тестов Тест" }],
+      }),
+    ).toEqual(["Тестов Тест Тестович", "Тестов Тест"]);
+  });
+
+  it("unions hits for the same person without merging people", () => {
+    const united = unionMatchCandidates(
+      [{ personId: "a", matchedOn: [{ field: "phone", value: "+7900" }] }],
+      [
+        {
+          personId: "a",
+          matchedOn: [
+            { field: "name", value: "Тестов Тест" },
+            { field: "dob", value: "1990-01-15" },
+          ],
+        },
+        { personId: "b", matchedOn: [{ field: "name", value: "Другов" }] },
+      ],
+    );
+    const byId = Object.fromEntries(united.map((c) => [c.personId, c.matchedOn]));
+    expect(byId.a).toEqual([
+      { field: "phone", value: "+7900" },
+      { field: "name", value: "Тестов Тест" },
+      { field: "dob", value: "1990-01-15" },
+    ]);
+    expect(byId.b).toEqual([{ field: "name", value: "Другов" }]);
   });
 });

@@ -60,6 +60,7 @@ export type {
   ListPersonsResult,
   MatchedOnField,
   MatchedOnJson,
+  NameDobQuery,
   PersonRepository,
   PersonSummary,
   PrismaTx,

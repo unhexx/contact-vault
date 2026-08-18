@@ -1,7 +1,9 @@
 import {
+  collectPersonNames,
   normalizeDocumentNumber,
   normalizeEmail,
   PersonDraftSchema,
+  scoreNameDobMatch,
   type ExactMatchKey,
   type Person,
   type PersonDraft,
@@ -31,6 +33,7 @@ import type {
   ListPersonsParams,
   ListPersonsResult,
   MatchedOnField,
+  NameDobQuery,
   PersonRepository,
   PersonSummary,
 } from "../types.js";
@@ -584,11 +587,62 @@ export function createPersonRepository(
     return result;
   }
 
+  /**
+   * Name + compatible partial DOB against non-deleted persons.
+   * Matching rule only — never merges. Missing DOB → no candidates.
+   */
+  async function findByNameAndDob(
+    query: NameDobQuery,
+    opts?: FindByExactKeysOpts,
+    tx?: DbClient,
+  ): Promise<ExactMatchCandidate[]> {
+    const names = query.names.map((n) => n.trim()).filter(Boolean);
+    const dob = query.dateOfBirth?.trim();
+    if (names.length === 0 || !dob) return [];
+
+    const c = db(tx ?? root);
+    const exclude = new Set(opts?.excludePersonIds ?? []);
+    const year = dob.match(/^(\d{4})/)?.[1];
+
+    const rows = await c.person.findMany({
+      where: {
+        deletedAt: null,
+        dateOfBirth: year ? { startsWith: year } : { equals: dob },
+        ...(exclude.size > 0 ? { id: { notIn: Array.from(exclude) } } : {}),
+      },
+      select: {
+        id: true,
+        dateOfBirth: true,
+        canonicalFull: true,
+        nameVariants: { select: { full: true } },
+      },
+    });
+
+    const result: ExactMatchCandidate[] = [];
+    for (const row of rows) {
+      if (exclude.has(row.id)) continue;
+      const hits = scoreNameDobMatch(
+        { names, dateOfBirth: dob },
+        {
+          names: collectPersonNames({
+            canonicalFull: row.canonicalFull,
+            nameVariants: row.nameVariants,
+          }),
+          dateOfBirth: row.dateOfBirth ?? undefined,
+        },
+      );
+      if (hits.length === 0) continue;
+      result.push({ personId: row.id, matchedOn: hits });
+    }
+    return result;
+  }
+
   return {
     list,
     get360,
     softDelete,
     createFromDraft,
     findByExactKeys,
+    findByNameAndDob,
   };
 }

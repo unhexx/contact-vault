@@ -660,4 +660,71 @@ Email: dismiss.other.${stamp}@example.com
       [...sourceIncidentIds].sort(),
     );
   }, 60_000);
+
+  it("name + compatible partial DOB opens a suggestion and does not merge", async () => {
+    const stamp = Date.now();
+    const last = `Синт${String(stamp).slice(-8)}`;
+    const phoneA = `+7901${String(stamp).slice(-7)}`;
+    const phoneB = `+7902${String(stamp).slice(-7)}`;
+    const section = (fio: string, phone: string, dob: string, tag: string) =>
+      [
+        `=== Общая сводка ${tag} ${stamp} ===`,
+        `Телефон: ${phone}`,
+        `ФИО: ${fio}`,
+        `День рождения: ${dob}`,
+        "",
+      ].join("\n");
+
+    const r1 = await importReport(
+      { prisma, storeRawReports: false },
+      {
+        filename: "name-dob-a.txt",
+        content: section(`${last} Нексус Тестович`, phoneA, "15.01.1990", "a"),
+      },
+    );
+    expect(r1.personIds).toHaveLength(1);
+    expect(r1.mergeSuggestions).toEqual([]);
+
+    const r2 = await importReport(
+      { prisma, storeRawReports: false },
+      {
+        filename: "name-dob-b.txt",
+        content: section(`${last} Нексус`, phoneB, "1990", "b"),
+      },
+    );
+    expect(r2.personIds).toHaveLength(1);
+    expect(r2.personIds[0]).not.toBe(r1.personIds[0]);
+    expect(r2.mergeSuggestions).toHaveLength(1);
+    const sug = r2.mergeSuggestions[0]!;
+    expect(sug.newPersonId).toBe(r2.personIds[0]);
+    expect(sug.targetPersonId).toBe(r1.personIds[0]);
+    expect(sug.matchedOn.map((m) => m.field).sort()).toEqual(["dob", "name"]);
+
+    const stillOpen = await prisma.mergeSuggestion.findUnique({
+      where: { id: sug.id },
+    });
+    expect(stillOpen?.status).toBe("open");
+    const both = await prisma.person.findMany({
+      where: { id: { in: [r1.personIds[0]!, r2.personIds[0]!] } },
+    });
+    expect(both.every((p) => p.deletedAt === null)).toBe(true);
+
+    const rConflict = await importReport(
+      { prisma, storeRawReports: false },
+      {
+        filename: "name-dob-c.txt",
+        content: section(
+          `${last} Нексус Тестович`,
+          `+7903${String(stamp).slice(-7)}`,
+          "16.01.1991",
+          "c",
+        ),
+      },
+    );
+    expect(
+      rConflict.mergeSuggestions.filter((s) =>
+        [...r1.personIds, ...r2.personIds].includes(s.targetPersonId),
+      ),
+    ).toEqual([]);
+  }, 60_000);
 });

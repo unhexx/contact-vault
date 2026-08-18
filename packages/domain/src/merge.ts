@@ -1,4 +1,5 @@
 import type { DocumentType } from "./identity-document.js";
+import { isLikelySamePerson } from "./name.js";
 import type { PersonDraft } from "./person.js";
 
 /** lower + trim — sole emailNorm authority (KD12). */
@@ -154,4 +155,141 @@ export function scoreExactMatches(
   }
 
   return hits;
+}
+
+export type MatchedOnKind = "phone" | "email" | "document" | "name" | "dob";
+
+export type MatchHit = {
+  field: MatchedOnKind;
+  value: string;
+};
+
+export type MatchCandidate = {
+  personId: string;
+  matchedOn: MatchHit[];
+};
+
+/**
+ * Normalize DOB for prefix-compatible matching.
+ * Accepts ISO YYYY[-MM[-DD]] and common RU DD.MM.YYYY / MM.YYYY / YYYY.
+ */
+export function normalizeDobForMatch(input: string): string | undefined {
+  const s = input.trim();
+  if (!s) return undefined;
+
+  const iso = s.match(/^(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?$/);
+  if (iso) {
+    if (iso[3]) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    if (iso[2]) return `${iso[1]}-${iso[2]}`;
+    return iso[1];
+  }
+
+  const dmy = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+  if (dmy) {
+    return `${dmy[3]}-${dmy[2]!.padStart(2, "0")}-${dmy[1]!.padStart(2, "0")}`;
+  }
+
+  const my = s.match(/^(\d{1,2})[./](\d{4})$/);
+  if (my) {
+    return `${my[2]}-${my[1]!.padStart(2, "0")}`;
+  }
+
+  if (/^\d{4}$/.test(s)) return s;
+
+  return s;
+}
+
+/**
+ * Compatible partial DOBs: equal, or one is a hyphen-boundary prefix of the other.
+ * Missing either side → not compatible. Conflicting full/month dates → not compatible.
+ */
+export function dobsCompatible(
+  a: string | undefined,
+  b: string | undefined,
+): boolean {
+  if (!a?.trim() || !b?.trim()) return false;
+  const na = normalizeDobForMatch(a);
+  const nb = normalizeDobForMatch(b);
+  if (!na || !nb) return false;
+  return na === nb || na.startsWith(`${nb}-`) || nb.startsWith(`${na}-`);
+}
+
+export function collectPersonNames(input: {
+  canonicalName?: { full?: string };
+  canonicalFull?: string | null;
+  nameVariants?: Array<{ full?: string }>;
+}): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw?: string | null) => {
+    const t = raw?.trim();
+    if (!t) return;
+    const key = t.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ");
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(t);
+  };
+  push(input.canonicalName?.full);
+  push(input.canonicalFull);
+  for (const nv of input.nameVariants ?? []) push(nv.full);
+  return out;
+}
+
+/**
+ * Name + compatible partial DOB matching rule.
+ * Missing DOB on either side → no hit. Conflicting dates → no hit.
+ * Name-only is never enough. Emits `name` and `dob` (no merge).
+ */
+export function scoreNameDobMatch(
+  draft: { names: string[]; dateOfBirth?: string },
+  candidate: { names: string[]; dateOfBirth?: string },
+): MatchHit[] {
+  if (!dobsCompatible(draft.dateOfBirth, candidate.dateOfBirth)) return [];
+
+  let matchedName: string | undefined;
+  for (const a of draft.names) {
+    for (const b of candidate.names) {
+      if (isLikelySamePerson(a, b)) {
+        matchedName = a;
+        break;
+      }
+    }
+    if (matchedName) break;
+  }
+  if (!matchedName) return [];
+
+  const draftDob = normalizeDobForMatch(draft.dateOfBirth!) ?? draft.dateOfBirth!;
+  const candDob =
+    normalizeDobForMatch(candidate.dateOfBirth!) ?? candidate.dateOfBirth!;
+  const dobValue = candDob.length > draftDob.length ? candDob : draftDob;
+
+  return [
+    { field: "name", value: matchedName },
+    { field: "dob", value: dobValue },
+  ];
+}
+
+/** Union match lists by personId; dedupe matchedOn field+value. */
+export function unionMatchCandidates(
+  ...lists: MatchCandidate[][]
+): MatchCandidate[] {
+  const byPerson = new Map<string, Map<string, MatchHit>>();
+  for (const list of lists) {
+    for (const c of list) {
+      let hits = byPerson.get(c.personId);
+      if (!hits) {
+        hits = new Map();
+        byPerson.set(c.personId, hits);
+      }
+      for (const hit of c.matchedOn) {
+        const id = `${hit.field}:${hit.value}`;
+        if (!hits.has(id)) hits.set(id, hit);
+      }
+    }
+  }
+  const result: MatchCandidate[] = [];
+  for (const [personId, hits] of byPerson) {
+    result.push({ personId, matchedOn: Array.from(hits.values()) });
+  }
+  return result;
 }

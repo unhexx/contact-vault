@@ -9,8 +9,10 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  collectPersonNames,
   contentHashOf,
   extractExactMatchKeys,
+  unionMatchCandidates,
 } from "@contact-vault/domain";
 import {
   createAuditLogRepository,
@@ -267,9 +269,18 @@ export async function importReport(
         const mergeSuggestions: ImportResult["mergeSuggestions"] = [];
 
         for (const draft of parsed.persons) {
-          // KD21: match BEFORE create (existing DB only)
+          // KD21: match BEFORE create (existing DB only). Suggestions only.
           const keys = extractExactMatchKeys(draft);
-          const candidates = await personRepo.findByExactKeys(keys, {}, tx);
+          const exactHits = await personRepo.findByExactKeys(keys, {}, tx);
+          const nameDobHits = await personRepo.findByNameAndDob(
+            {
+              names: collectPersonNames(draft),
+              dateOfBirth: draft.dateOfBirth,
+            },
+            {},
+            tx,
+          );
+          const candidates = unionMatchCandidates(exactHits, nameDobHits);
 
           const newPerson = await personRepo.createFromDraft(
             draft,

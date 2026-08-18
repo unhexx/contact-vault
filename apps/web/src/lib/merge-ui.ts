@@ -34,6 +34,8 @@ const FIELD_LABELS: Record<string, string> = {
   phone: "Phone",
   email: "Email",
   document: "Document",
+  name: "Name",
+  dob: "Date of birth",
 };
 
 export function matchedFieldLabel(field: string): string {

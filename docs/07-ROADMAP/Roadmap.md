@@ -54,7 +54,7 @@ List search already matches `canonicalFull` / `nameVariants`, phone `e164`, `ema
 
 | # | Slice | Delivery |
 |---|-------|----------|
-| 1 | Fuzzy matching (name + partial DOB) | New matching rule only. Candidate when `isLikelySamePerson` on canonical/variants **and** DOBs are compatible (equal or one is a prefix of the other). Conflicting full dates → no hit. Missing DOB on either side → no hit. Emit `MergeSuggestion` with `matchedOn` field `name` (and `dob` if the enum is extended). Inbox UI already exists. |
+| 1 | Fuzzy matching (name + partial DOB) | **Done.** Matching rule only: `isLikelySamePerson` on canonical/variants **and** compatible partial DOB (equal or hyphen-boundary prefix). Conflicting full dates → no hit. Missing DOB → no hit. `matchedOn` emits `name` + `dob`. Inbox UI unchanged. No silent merge. |
 | 2 | Import timeline | Append-only event list on Contact 360 from `PersonSourceReport` / ReportImport + `audit_log` (`listForEntity("Person", id)`). Show action, actor, timestamp, contentHash, format. Do not mutate or collapse history. |
 | 3 | JSContact export | Mapper + download of identity + contact points: `@type: Card`, `version: "2.0"`, `uid` = Person id, `kind: individual`, `name` components, `phones` / `emails` maps. Pass extras through as unknown properties. **Not** documents / risk / incidents. **Not** a Prisma/Zod rewrite. |
 
