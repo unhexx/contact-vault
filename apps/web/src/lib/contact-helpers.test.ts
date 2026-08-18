@@ -30,8 +30,10 @@ describe("contact-helpers", () => {
   it("labels timeline actions", () => {
     expect(timelineActionLabel("import")).toBe("Import");
     expect(timelineActionLabel("merge")).toBe("Merge");
+    expect(timelineActionLabel("unmerge")).toBe("Unmerge");
     expect(timelineActionLabel("dismiss")).toBe("Dismiss");
     expect(timelineActionVariant("merge")).toBe("default");
+    expect(timelineActionVariant("unmerge")).toBe("default");
     expect(timelineActionVariant("soft_delete")).toBe("destructive");
   });
 

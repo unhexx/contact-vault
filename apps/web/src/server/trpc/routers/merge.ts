@@ -1,7 +1,8 @@
 /**
- * merge.* procedures — listSuggestions / preview / accept / dismiss.
+ * merge.* procedures — listSuggestions / preview / accept / dismiss / undo.
  * Accept always merges newPersonId → targetPersonId (KD18).
  * Dismiss = keep both (no separate keep_separate strategy).
+ * Undo = restore a no-collision merge from its audit event (no UI yet).
  */
 import { z } from "zod";
 
@@ -11,6 +12,7 @@ import {
   listSuggestions,
   mergePersons,
   previewMerge,
+  undoMerge,
 } from "../../services/merge.js";
 import { publicProcedure, router, wrap } from "../trpc.js";
 
@@ -65,5 +67,11 @@ export const mergeRouter = router({
     .input(z.object({ suggestionId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       wrap(async () => dismissSuggestion(ctx.prisma, input.suggestionId)),
+    ),
+
+  undo: publicProcedure
+    .input(z.object({ auditEventId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      wrap(async () => undoMerge(ctx.prisma, input.auditEventId)),
     ),
 });

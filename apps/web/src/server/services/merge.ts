@@ -2,6 +2,7 @@
  * Explicit merge service (KD18, KD22).
  * Move children + PersonSourceReport; provenance merge on norm-key collisions;
  * soft-delete source; reversible AuditLog payload.
+ * Undo (first slice): restore no-collision merges from that audit event.
  */
 import {
   Prisma,
@@ -10,6 +11,12 @@ import {
   type MatchedOnField,
   type PrismaClient,
 } from "@contact-vault/db";
+import {
+  mergeUndoBlockReason,
+  parseMergeAuditPayload,
+  type MovedEntityIds,
+  type PersonScalarSnapshot,
+} from "@contact-vault/domain";
 
 import { AppError } from "../errors.js";
 
@@ -58,6 +65,13 @@ export type MergePersonsParams = {
 
 export type MergePersonsResult = {
   targetPersonId: string;
+  auditLogId: string;
+};
+
+export type UndoMergeResult = {
+  sourcePersonId: string;
+  targetPersonId: string;
+  mergeAuditId: string;
 };
 
 export type MergePreview = {
@@ -716,8 +730,8 @@ export async function mergePersons(
         data: { deletedAt: now },
       });
 
-      // Dismiss other open suggestions involving source
-      await tx.mergeSuggestion.updateMany({
+      // Dismiss other open suggestions involving source (accepted one is already closed)
+      const autoDismiss = await tx.mergeSuggestion.findMany({
         where: {
           status: "open",
           OR: [
@@ -725,10 +739,28 @@ export async function mergePersons(
             { targetPersonId: sourcePersonId },
           ],
         },
-        data: { status: "dismissed", resolvedAt: now },
+        select: { id: true },
       });
+      const dismissedSuggestionIds = autoDismiss.map((row) => row.id);
+      if (dismissedSuggestionIds.length > 0) {
+        await tx.mergeSuggestion.updateMany({
+          where: { id: { in: dismissedSuggestionIds } },
+          data: { status: "dismissed", resolvedAt: now },
+        });
+      }
 
-      await tx.auditLog.create({
+      const targetScalarsBefore: PersonScalarSnapshot = {
+        canonicalFull: target.canonicalFull,
+        canonicalLast: target.canonicalLast,
+        canonicalFirst: target.canonicalFirst,
+        canonicalMiddle: target.canonicalMiddle,
+        dateOfBirth: target.dateOfBirth,
+        placeOfBirth: target.placeOfBirth,
+        gender: target.gender,
+        extras: target.extras ?? null,
+      };
+
+      const mergeAudit = await tx.auditLog.create({
         data: {
           action: "merge",
           actor: "local",
@@ -740,12 +772,347 @@ export async function mergePersons(
             movedEntityIds,
             skippedPersonSourceReportIds,
             mergedIntoExisting,
-            suggestionId,
+            suggestionId: suggestionId ?? null,
+            targetScalarsBefore,
+            dismissedSuggestionIds,
           }),
         },
       });
 
-      return { targetPersonId };
+      return { targetPersonId, auditLogId: mergeAudit.id };
+    },
+    {
+      maxWait: 10_000,
+      timeout: 60_000,
+    },
+  );
+}
+
+type MoveGroup = {
+  key: keyof MovedEntityIds;
+  countOnTarget: (
+    db: MergeDb,
+    ids: string[],
+    personId: string,
+  ) => Promise<number>;
+  moveTo: (db: MergeDb, ids: string[], personId: string) => Promise<void>;
+};
+
+const UNDO_MOVE_GROUPS: MoveGroup[] = [
+  {
+    key: "contactPoints",
+    countOnTarget: (db, ids, personId) =>
+      db.contactPoint.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.contactPoint
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+  {
+    key: "documents",
+    countOnTarget: (db, ids, personId) =>
+      db.identityDocument.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.identityDocument
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+  {
+    key: "addresses",
+    countOnTarget: (db, ids, personId) =>
+      db.address.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.address
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+  {
+    key: "relationships",
+    countOnTarget: (db, ids, personId) =>
+      db.relationship.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.relationship
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+  {
+    key: "nameVariants",
+    countOnTarget: (db, ids, personId) =>
+      db.nameVariant.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.nameVariant
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+  {
+    key: "personSourceReports",
+    countOnTarget: (db, ids, personId) =>
+      db.personSourceReport.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.personSourceReport
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+  {
+    key: "riskScores",
+    countOnTarget: (db, ids, personId) =>
+      db.riskScore.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.riskScore
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+  {
+    key: "incidents",
+    countOnTarget: (db, ids, personId) =>
+      db.incident.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.incident
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+  {
+    key: "bankRelations",
+    countOnTarget: (db, ids, personId) =>
+      db.bankRelation.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.bankRelation
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+  {
+    key: "vehicles",
+    countOnTarget: (db, ids, personId) =>
+      db.vehicle.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.vehicle
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+  {
+    key: "employments",
+    countOnTarget: (db, ids, personId) =>
+      db.employment.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.employment
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+  {
+    key: "financialFacts",
+    countOnTarget: (db, ids, personId) =>
+      db.financialFact.count({ where: { id: { in: ids }, personId } }),
+    moveTo: (db, ids, personId) =>
+      db.financialFact
+        .updateMany({ where: { id: { in: ids } }, data: { personId } })
+        .then(() => undefined),
+  },
+];
+
+function scalarWriteData(snapshot: PersonScalarSnapshot) {
+  return {
+    canonicalFull: snapshot.canonicalFull,
+    canonicalLast: snapshot.canonicalLast,
+    canonicalFirst: snapshot.canonicalFirst,
+    canonicalMiddle: snapshot.canonicalMiddle,
+    dateOfBirth: snapshot.dateOfBirth,
+    placeOfBirth: snapshot.placeOfBirth,
+    gender: snapshot.gender,
+    extras: snapshot.extras == null ? Prisma.DbNull : toJson(snapshot.extras),
+  };
+}
+
+/**
+ * Undo a merge from its audit event. First slice: no-collision only.
+ * Appends `unmerge` (does not rewrite the merge row).
+ */
+export async function undoMerge(
+  prisma: PrismaClient,
+  auditEventId: string,
+): Promise<UndoMergeResult> {
+  const event = await prisma.auditLog.findUnique({
+    where: { id: auditEventId },
+  });
+  if (!event) {
+    throw new AppError("NOT_FOUND", "Merge audit event not found");
+  }
+  if (event.action !== "merge") {
+    throw new AppError(
+      "BAD_REQUEST",
+      "Audit event is not a merge",
+      "MERGE_UNDO_NOT_MERGE",
+    );
+  }
+
+  const payload = parseMergeAuditPayload(event.payload);
+  if (!payload) {
+    throw new AppError(
+      "BAD_REQUEST",
+      "Cannot undo merge: audit payload is not a merge record",
+      "MERGE_UNDO_BAD_PAYLOAD",
+    );
+  }
+
+  const blocked = mergeUndoBlockReason(payload);
+  if (blocked === "missing_target_scalars") {
+    throw new AppError(
+      "BAD_REQUEST",
+      "Cannot undo merge: audit payload lacks targetScalarsBefore",
+      "MERGE_UNDO_UNSUPPORTED",
+    );
+  }
+  if (blocked === "has_collisions" || blocked === "has_skipped_psr") {
+    throw new AppError(
+      "BAD_REQUEST",
+      "Cannot undo merge: colliding facts were deleted and are not restorable in this slice",
+      "MERGE_UNDO_COLLISION",
+    );
+  }
+
+  const { sourcePersonId, targetPersonId } = payload;
+  const targetScalarsBefore = payload.targetScalarsBefore!;
+
+  return prisma.$transaction(
+    async (tx) => {
+      const already = await tx.auditLog.findFirst({
+        where: {
+          action: "unmerge",
+          entityType: "Person",
+          entityId: targetPersonId,
+          payload: {
+            path: ["mergeAuditId"],
+            equals: auditEventId,
+          },
+        },
+        select: { id: true },
+      });
+      if (already) {
+        throw new AppError(
+          "CONFLICT",
+          "Cannot undo merge: already undone",
+          "MERGE_UNDO_ALREADY",
+        );
+      }
+
+      const laterMerge = await tx.auditLog.findFirst({
+        where: {
+          action: "merge",
+          entityType: "Person",
+          entityId: targetPersonId,
+          createdAt: { gt: event.createdAt },
+        },
+        select: { id: true },
+      });
+      if (laterMerge) {
+        throw new AppError(
+          "CONFLICT",
+          "Cannot undo merge: a later merge superseded this event",
+          "MERGE_UNDO_SUPERSEDED",
+        );
+      }
+
+      const [source, target] = await Promise.all([
+        tx.person.findUnique({
+          where: { id: sourcePersonId },
+          select: { id: true, deletedAt: true },
+        }),
+        tx.person.findUnique({
+          where: { id: targetPersonId },
+          select: { id: true, deletedAt: true },
+        }),
+      ]);
+      if (!source) {
+        throw new AppError(
+          "BAD_REQUEST",
+          "Cannot undo merge: source person is missing",
+          "MERGE_UNDO_SOURCE_STATE",
+        );
+      }
+      if (source.deletedAt == null) {
+        throw new AppError(
+          "CONFLICT",
+          "Cannot undo merge: source person is not soft-deleted",
+          "MERGE_UNDO_SOURCE_STATE",
+        );
+      }
+      if (!target || target.deletedAt != null) {
+        throw new AppError(
+          "BAD_REQUEST",
+          "Cannot undo merge: target person is missing or soft-deleted",
+          "MERGE_UNDO_TARGET_STATE",
+        );
+      }
+
+      for (const group of UNDO_MOVE_GROUPS) {
+        const ids = payload.movedEntityIds[group.key];
+        if (ids.length === 0) continue;
+        const onTarget = await group.countOnTarget(tx, ids, targetPersonId);
+        if (onTarget !== ids.length) {
+          throw new AppError(
+            "CONFLICT",
+            "Cannot undo merge: a moved entity is no longer on the survivor",
+            "MERGE_UNDO_MUTATED",
+          );
+        }
+      }
+
+      await tx.person.update({
+        where: { id: sourcePersonId },
+        data: { deletedAt: null },
+      });
+
+      for (const group of UNDO_MOVE_GROUPS) {
+        const ids = payload.movedEntityIds[group.key];
+        if (ids.length === 0) continue;
+        await group.moveTo(tx, ids, sourcePersonId);
+      }
+
+      await tx.person.update({
+        where: { id: targetPersonId },
+        data: scalarWriteData(targetScalarsBefore),
+      });
+
+      if (payload.suggestionId) {
+        await tx.mergeSuggestion.updateMany({
+          where: { id: payload.suggestionId, status: "accepted" },
+          data: { status: "open", resolvedAt: null },
+        });
+      }
+      if (payload.dismissedSuggestionIds.length > 0) {
+        await tx.mergeSuggestion.updateMany({
+          where: {
+            id: { in: payload.dismissedSuggestionIds },
+            status: "dismissed",
+          },
+          data: { status: "open", resolvedAt: null },
+        });
+      }
+
+      const unmergePayload = {
+        mergeAuditId: auditEventId,
+        sourcePersonId,
+        targetPersonId,
+      };
+      await tx.auditLog.create({
+        data: {
+          action: "unmerge",
+          actor: "local",
+          entityType: "Person",
+          entityId: targetPersonId,
+          payload: toJson(unmergePayload),
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          action: "unmerge",
+          actor: "local",
+          entityType: "Person",
+          entityId: sourcePersonId,
+          payload: toJson(unmergePayload),
+        },
+      });
+
+      return { sourcePersonId, targetPersonId, mergeAuditId: auditEventId };
     },
     {
       maxWait: 10_000,

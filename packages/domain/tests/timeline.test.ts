@@ -70,10 +70,18 @@ describe("mergePersonTimeline", () => {
           createdAt: "2026-08-02T12:00:00.000Z",
           payload: { suggestionId: "sug" },
         },
+        {
+          id: "audit-unmerge",
+          action: "unmerge",
+          actor: "local",
+          createdAt: "2026-08-03T11:00:00.000Z",
+          payload: { mergeAuditId: "audit-merge" },
+        },
       ],
     );
 
     expect(events.map((e) => e.action)).toEqual([
+      "unmerge",
       "merge",
       "dismiss",
       "import",
@@ -81,8 +89,9 @@ describe("mergePersonTimeline", () => {
     ]);
     expect(events.filter((e) => e.contentHash === hashA)).toHaveLength(2);
     expect(events[0]?.source).toBe("audit");
-    expect(events[2]?.id).toBe("psr:psr-dup");
-    expect(events[3]?.format).toBe("void-html");
+    expect(events[0]?.action).toBe("unmerge");
+    expect(events[3]?.id).toBe("psr:psr-dup");
+    expect(events[4]?.format).toBe("void-html");
   });
 
   it("surfaces contentHash and unknown format from audit payload", () => {

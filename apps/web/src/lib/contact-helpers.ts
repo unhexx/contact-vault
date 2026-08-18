@@ -130,6 +130,7 @@ export function timelineActionVariant(
 ): "default" | "secondary" | "outline" | "destructive" {
   switch (action) {
     case "merge":
+    case "unmerge":
       return "default";
     case "dismiss":
       return "outline";
@@ -147,6 +148,8 @@ export function timelineActionLabel(action: string): string {
       return "Import";
     case "merge":
       return "Merge";
+    case "unmerge":
+      return "Unmerge";
     case "dismiss":
       return "Dismiss";
     case "soft_delete":

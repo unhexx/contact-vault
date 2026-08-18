@@ -8,6 +8,7 @@ import {
   collisionsFromChildren,
   mergePersons,
   pickSurvivorScalars,
+  undoMerge,
 } from "./merge.js";
 
 const blankScalars = {
@@ -118,6 +119,84 @@ describe("pickSurvivorScalars", () => {
       { ...blankScalars, extras: { profile: { inn: "1" } } },
     );
     expect(merged.extras).toEqual({ profile: { inn: "1" } });
+  });
+});
+
+describe("undoMerge guards", () => {
+  const auditId = "00000000-0000-4000-8000-000000000099";
+
+  it("rejects a missing audit event without starting a transaction", async () => {
+    const prisma = {
+      auditLog: {
+        findUnique: async () => null,
+      },
+      $transaction: async () => {
+        throw new Error("should not start tx");
+      },
+    };
+    await expect(undoMerge(prisma as never, auditId)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+
+  it("rejects a non-merge audit event", async () => {
+    const prisma = {
+      auditLog: {
+        findUnique: async () => ({
+          id: auditId,
+          action: "dismiss",
+          payload: {},
+        }),
+      },
+      $transaction: async () => {
+        throw new Error("should not start tx");
+      },
+    };
+    await expect(undoMerge(prisma as never, auditId)).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      appCode: "MERGE_UNDO_NOT_MERGE",
+    });
+  });
+
+  it("rejects a merge payload that has hard-deleted collisions", async () => {
+    const prisma = {
+      auditLog: {
+        findUnique: async () => ({
+          id: auditId,
+          action: "merge",
+          payload: {
+            sourcePersonId: "11111111-1111-4111-8111-111111111111",
+            targetPersonId: "22222222-2222-4222-8222-222222222222",
+            movedEntityIds: {},
+            skippedPersonSourceReportIds: [],
+            mergedIntoExisting: [
+              {
+                entityType: "ContactPoint",
+                entityId: "33333333-3333-4333-8333-333333333333",
+                fromSourceEntityId: "44444444-4444-4444-8444-444444444444",
+              },
+            ],
+            targetScalarsBefore: {
+              canonicalFull: null,
+              canonicalLast: null,
+              canonicalFirst: null,
+              canonicalMiddle: null,
+              dateOfBirth: null,
+              placeOfBirth: null,
+              gender: null,
+              extras: null,
+            },
+          },
+        }),
+      },
+      $transaction: async () => {
+        throw new Error("should not start tx");
+      },
+    };
+    await expect(undoMerge(prisma as never, auditId)).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      appCode: "MERGE_UNDO_COLLISION",
+    });
   });
 });
 

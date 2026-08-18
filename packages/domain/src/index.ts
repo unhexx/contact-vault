@@ -125,3 +125,18 @@ export {
   type MatchHit,
   type MatchedOnKind,
 } from "./merge.js";
+
+// Merge audit payload / undo policy (reversible merge first slice)
+export {
+  MergeAuditPayloadSchema,
+  MergedIntoExistingSchema,
+  MovedEntityIdsSchema,
+  PersonScalarSnapshotSchema,
+  mergeUndoBlockReason,
+  parseMergeAuditPayload,
+  type MergeAuditPayload,
+  type MergeUndoBlockReason,
+  type MergedIntoExisting,
+  type MovedEntityIds,
+  type PersonScalarSnapshot,
+} from "./merge-audit.js";

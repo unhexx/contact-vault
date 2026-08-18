@@ -24,6 +24,7 @@ import {
   findNormKeyCollisions,
   mergePersons,
   previewMerge,
+  undoMerge,
 } from "./merge.js";
 
 const DATABASE_URL =
@@ -941,5 +942,266 @@ Email: dismiss.other.${stamp}@example.com
         [...r1.personIds, ...r2.personIds].includes(s.targetPersonId),
       ),
     ).toEqual([]);
+  }, 60_000);
+
+  it("undo restores a no-collision merge from the audit event", async () => {
+    const stamp = Date.now();
+    const reportA = randomUUID();
+    const reportB = randomUUID();
+    const emptyProv = [] as const;
+    const sourceName = `UndoSrc ${stamp}`;
+    const targetName = `UndoTgt ${stamp}`;
+
+    await prisma.reportImport.createMany({
+      data: [
+        {
+          id: reportA,
+          format: "sectioned_text",
+          status: "completed",
+          contentHash: `undo-a-${stamp}`,
+          filename: "undo-a.txt",
+          completedAt: new Date(),
+        },
+        {
+          id: reportB,
+          format: "sectioned_text",
+          status: "completed",
+          contentHash: `undo-b-${stamp}`,
+          filename: "undo-b.txt",
+          completedAt: new Date(),
+        },
+      ],
+    });
+
+    const target = await prisma.person.create({
+      data: {
+        canonicalFull: targetName,
+        dateOfBirth: "1980-02-02",
+        extras: { keep: "target" },
+        sourceReports: {
+          create: {
+            reportImportId: reportA,
+            query: "target",
+            contentHash: `undo-a-${stamp}`,
+            mode: "text_export",
+          },
+        },
+        bankRelations: {
+          create: {
+            bankName: "TargetBank",
+            provenance: emptyProv,
+          },
+        },
+      },
+    });
+
+    const source = await prisma.person.create({
+      data: {
+        canonicalFull: sourceName,
+        canonicalLast: "Источник",
+        dateOfBirth: "1990-01-15",
+        extras: { extra: "source" },
+        contactPoints: {
+          create: {
+            kind: "phone",
+            e164: `+7911${String(stamp).slice(-7)}`,
+            raw: `+7911${String(stamp).slice(-7)}`,
+            provenance: emptyProv,
+          },
+        },
+        nameVariants: {
+          create: {
+            full: sourceName,
+            last: "Источник",
+            provenance: emptyProv,
+          },
+        },
+        bankRelations: {
+          create: {
+            bankName: "SourceBank",
+            provenance: emptyProv,
+          },
+        },
+        employments: {
+          create: {
+            employer: "ООО Источник",
+            provenance: emptyProv,
+          },
+        },
+        sourceReports: {
+          create: {
+            reportImportId: reportB,
+            query: "source",
+            contentHash: `undo-b-${stamp}`,
+            mode: "text_export",
+          },
+        },
+      },
+    });
+
+    const sourcePhone = await prisma.contactPoint.findFirstOrThrow({
+      where: { personId: source.id },
+    });
+    const sourceBank = await prisma.bankRelation.findFirstOrThrow({
+      where: { personId: source.id },
+    });
+    const sourceJob = await prisma.employment.findFirstOrThrow({
+      where: { personId: source.id },
+    });
+    const sourcePsr = await prisma.personSourceReport.findFirstOrThrow({
+      where: { personId: source.id },
+    });
+    const sourceVariant = await prisma.nameVariant.findFirstOrThrow({
+      where: { personId: source.id },
+    });
+
+    const suggestion = await prisma.mergeSuggestion.create({
+      data: {
+        reportImportId: reportB,
+        newPersonId: source.id,
+        targetPersonId: target.id,
+        matchedOn: [{ field: "name", value: sourceName }, { field: "dob", value: "1990-01-15" }],
+        status: "open",
+      },
+    });
+
+    const extraOpen = await prisma.mergeSuggestion.create({
+      data: {
+        reportImportId: reportA,
+        newPersonId: source.id,
+        targetPersonId: target.id,
+        matchedOn: [{ field: "name", value: sourceName }],
+        status: "open",
+      },
+    });
+
+    const merged = await mergePersons(prisma, {
+      sourcePersonId: source.id,
+      targetPersonId: target.id,
+      suggestionId: suggestion.id,
+    });
+    expect(merged.auditLogId).toBeTruthy();
+
+    const afterMerge = await prisma.person.findUniqueOrThrow({
+      where: { id: target.id },
+    });
+    expect(afterMerge.canonicalFull).toBe(targetName);
+    expect(afterMerge.canonicalLast).toBe("Источник");
+    expect(afterMerge.dateOfBirth).toBe("1980-02-02");
+
+    const undone = await undoMerge(prisma, merged.auditLogId);
+    expect(undone.sourcePersonId).toBe(source.id);
+    expect(undone.targetPersonId).toBe(target.id);
+    expect(undone.mergeAuditId).toBe(merged.auditLogId);
+
+    const sourceRow = await prisma.person.findUniqueOrThrow({
+      where: { id: source.id },
+    });
+    expect(sourceRow.deletedAt).toBeNull();
+    expect(sourceRow.canonicalFull).toBe(sourceName);
+
+    const targetRow = await prisma.person.findUniqueOrThrow({
+      where: { id: target.id },
+    });
+    expect(targetRow.canonicalFull).toBe(targetName);
+    expect(targetRow.canonicalLast).toBeNull();
+    expect(targetRow.dateOfBirth).toBe("1980-02-02");
+    expect(targetRow.extras).toEqual({ keep: "target" });
+
+    expect(
+      await prisma.contactPoint.findFirst({
+        where: { id: sourcePhone.id, personId: source.id },
+      }),
+    ).not.toBeNull();
+    expect(
+      await prisma.bankRelation.findFirst({
+        where: { id: sourceBank.id, personId: source.id },
+      }),
+    ).not.toBeNull();
+    expect(
+      await prisma.employment.findFirst({
+        where: { id: sourceJob.id, personId: source.id },
+      }),
+    ).not.toBeNull();
+    expect(
+      await prisma.personSourceReport.findFirst({
+        where: { id: sourcePsr.id, personId: source.id },
+      }),
+    ).not.toBeNull();
+    expect(
+      await prisma.nameVariant.findFirst({
+        where: { id: sourceVariant.id, personId: source.id },
+      }),
+    ).not.toBeNull();
+
+    expect(
+      await prisma.bankRelation.count({
+        where: { personId: target.id, deletedAt: null },
+      }),
+    ).toBe(1);
+
+    const reopened = await prisma.mergeSuggestion.findUniqueOrThrow({
+      where: { id: suggestion.id },
+    });
+    expect(reopened.status).toBe("open");
+    expect(reopened.resolvedAt).toBeNull();
+
+    const extra = await prisma.mergeSuggestion.findUniqueOrThrow({
+      where: { id: extraOpen.id },
+    });
+    expect(extra.status).toBe("open");
+
+    const unmergeLogs = await prisma.auditLog.findMany({
+      where: { action: "unmerge", entityId: { in: [source.id, target.id] } },
+    });
+    expect(unmergeLogs).toHaveLength(2);
+
+    await expect(undoMerge(prisma, merged.auditLogId)).rejects.toMatchObject({
+      code: "CONFLICT",
+      appCode: "MERGE_UNDO_ALREADY",
+    });
+  }, 60_000);
+
+  it("refuses undo when merge deleted colliding contact points", async () => {
+    const stamp = Date.now();
+    const phone = `+7922${String(stamp).slice(-7)}`;
+    const emptyProv = [] as const;
+
+    const target = await prisma.person.create({
+      data: {
+        canonicalFull: `CollideTgt ${stamp}`,
+        contactPoints: {
+          create: {
+            kind: "phone",
+            e164: phone,
+            raw: phone,
+            provenance: emptyProv,
+          },
+        },
+      },
+    });
+    const source = await prisma.person.create({
+      data: {
+        canonicalFull: `CollideSrc ${stamp}`,
+        contactPoints: {
+          create: {
+            kind: "phone",
+            e164: phone,
+            raw: phone,
+            provenance: emptyProv,
+          },
+        },
+      },
+    });
+
+    const merged = await mergePersons(prisma, {
+      sourcePersonId: source.id,
+      targetPersonId: target.id,
+    });
+
+    await expect(undoMerge(prisma, merged.auditLogId)).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      appCode: "MERGE_UNDO_COLLISION",
+    });
   }, 60_000);
 });
